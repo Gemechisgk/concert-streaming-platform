@@ -1,3 +1,5 @@
+'use client';
+
 import { TicketService } from '@concert/business-logic';
 import { formatCurrency } from '@concert/shared';
 import { DollarSign, ShieldCheck, Download, RefreshCw, FileText } from 'lucide-react';

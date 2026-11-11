@@ -1,3 +1,5 @@
+'use client';
+
 import { AnalyticsService } from '@concert/business-logic';
 import { formatCurrency } from '@concert/shared';
 import { BarChart3, TrendingUp, Globe, Clock, Download } from 'lucide-react';
