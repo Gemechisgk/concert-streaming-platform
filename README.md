@@ -20,6 +20,10 @@ A high-performance, branded live concert streaming monorepo application engineer
 - `packages/validation`: Shared Zod validation schemas
 - `packages/types`: Core TypeScript interfaces
 
+## GitHub Repository & Vercel Deployment
+- **GitHub Repository**: [https://github.com/Gemechisgk/concert-streaming-platform](https://github.com/Gemechisgk/concert-streaming-platform)
+- **Vercel Auto-Deploy Compatible**: Preconfigured with `vercel.json` for monorepo auto-builds (`apps/web`). All 38 routes build cleanly out-of-the-box.
+
 ## Quick Start
 ```bash
 # Install dependencies
