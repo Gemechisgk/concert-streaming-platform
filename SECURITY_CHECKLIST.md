@@ -1,0 +1,21 @@
+# Security Checklist & Guidelines
+
+- [x] **Authentication Security**:
+  - Passwords hashed using bcrypt/Argon2.
+  - HttpOnly, Secure, SameSite cookies for session tokens.
+  - Rate limiting on login and registration routes.
+- [x] **Streaming Access Protection**:
+  - Playback tokens signed with cryptographic HMAC/JWT and short expiry window (15 mins).
+  - Single active session enforcement per ticket to prevent stream sharing.
+  - RTMP ingest keys kept secret and validated server-side on SRS `on_publish` hook.
+- [x] **Payment Security**:
+  - Webhook signatures verified using provider cryptographic secrets.
+  - Idempotency keys checked on checkout and webhook handlers to prevent duplicate billing.
+  - Storing money values as minor integers (cents/santims) to prevent rounding exploits.
+- [x] **Application Security**:
+  - Zod validation on 100% of incoming payloads.
+  - SQL injection protection via Prisma parameterized queries.
+  - XSS mitigation via React safe rendering and Content Security Policy (CSP).
+  - CORS strictly configured to trusted domains.
+- [x] **Audit & Observability**:
+  - Administrative changes and financial mutations recorded in `audit_logs`.

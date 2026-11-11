@@ -1,0 +1,43 @@
+{
+  "name": "concert-streaming-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "High-capacity branded concert live-streaming platform with adaptive video, real-time chat, virtual gifts, ticketing, and administrative control",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:web": "pnpm --filter @concert/web dev",
+    "dev:realtime": "pnpm --filter @concert/realtime dev",
+    "dev:workers": "pnpm --filter @concert/workers dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "tsx --test tests/integration/core-platform.test.ts",
+    "db:generate": "pnpm --filter @concert/database db:generate",
+    "db:push": "pnpm --filter @concert/database db:push",
+    "db:seed": "pnpm --filter @concert/database db:seed",
+    "db:studio": "pnpm --filter @concert/database db:studio"
+  },
+  "devDependencies": {
+    "@prisma/client": "5.22.0",
+    "@types/node": "^22.20.5",
+    "prettier": "^3.5.3",
+    "prisma": "5.22.0",
+    "turbo": "^2.4.4",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "sharp"
+    ]
+  },
+  "packageManager": "pnpm@12.18.0"
+}
