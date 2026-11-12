@@ -3,5 +3,5 @@
   "framework": "nextjs",
   "buildCommand": "pnpm prisma generate --schema=prisma/schema.prisma && pnpm --filter @concert/web build",
   "outputDirectory": "apps/web/.next",
-  "installCommand": "pnpm install"
+  "installCommand": "pnpm install --no-frozen-lockfile"
 }
