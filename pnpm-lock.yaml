@@ -172,12 +172,21 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      next:
+        specifier: 15.1.7
+        version: 15.1.7(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       prettier:
         specifier: ^3.5.3
         version: 3.9.10
       prisma:
         specifier: 5.22.0
         version: 5.22.0
+      react:
+        specifier: 19.0.0
+        version: 19.0.0
+      react-dom:
+        specifier: 19.0.0
+        version: 19.0.0(react@19.0.0)
       turbo:
         specifier: ^2.4.4
         version: 2.11.10
