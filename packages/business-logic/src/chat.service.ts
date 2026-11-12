@@ -3,6 +3,54 @@ import { AppError } from '@concert/shared';
 
 // Event chat histories
 let mockChatMessages: Record<string, ChatMessage[]> = {
+  evt_veronica_01: [
+    {
+      id: 'msg_v01',
+      eventId: 'evt_veronica_01',
+      userId: 'usr_mod',
+      userName: 'Feshta Stage Director',
+      userRole: 'EVENT_ADMIN',
+      text: '🎵 Welcome to Veronica Adane Live at Feshta Fest! Crystal clear HD stream & studio audio enabled. Enjoy the concert! 🎉',
+      timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+      isPinned: true
+    },
+    {
+      id: 'msg_v02',
+      eventId: 'evt_veronica_01',
+      userId: 'usr_02',
+      userName: 'Selamawit T.',
+      userRole: 'VIEWER',
+      text: 'Greetings from Addis Ababa! Veronica looks absolutely stunning on the main stage! 🔥🔥🔥',
+      timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'msg_v03',
+      eventId: 'evt_veronica_01',
+      userId: 'usr_03',
+      userName: 'Dawit M.',
+      userRole: 'VIEWER',
+      text: 'The sound quality is 10/10 with headphones! Cleanest live stream ever 🎧✨',
+      timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'msg_v04',
+      eventId: 'evt_veronica_01',
+      userId: 'usr_04',
+      userName: 'Almaz K.',
+      userRole: 'VIEWER',
+      text: 'That vocal intro gave me absolute chills!! 🌹🌹 Singing every lyric!',
+      timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'msg_v05',
+      eventId: 'evt_veronica_01',
+      userId: 'usr_05',
+      userName: 'Brook E.',
+      userRole: 'VIEWER',
+      text: 'Watching live with the whole family in Frankfurt! Feshta Fest is on fire! 🇪🇹❤️',
+      timestamp: new Date(Date.now() - 1 * 60 * 1000).toISOString()
+    }
+  ],
   evt_teddy_afro_01: [
     {
       id: 'msg_01',
@@ -10,7 +58,7 @@ let mockChatMessages: Record<string, ChatMessage[]> = {
       userId: 'usr_mod',
       userName: 'Stage Director',
       userRole: 'EVENT_ADMIN',
-      text: '🎵 Welcome to the Teddy Afro Millennium live stream! Sound check 100% crystal clear. Enjoy the show!',
+      text: '🎵 Welcome to the live concert broadcast! Sound check crystal clear. Enjoy the show!',
       timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
       isPinned: true
     },
@@ -22,24 +70,6 @@ let mockChatMessages: Record<string, ChatMessage[]> = {
       userRole: 'VIEWER',
       text: 'Greetings from Washington DC! Sound is incredible! 🔥🇪🇹',
       timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString()
-    },
-    {
-      id: 'msg_03',
-      eventId: 'evt_teddy_afro_01',
-      userId: 'usr_03',
-      userName: 'Dawit G.',
-      userRole: 'VIEWER',
-      text: 'Watching live with the whole family here in London! Teddy is the king! 👑',
-      timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString()
-    },
-    {
-      id: 'msg_04',
-      eventId: 'evt_teddy_afro_01',
-      userId: 'usr_04',
-      userName: 'Almaz B.',
-      userRole: 'VIEWER',
-      text: 'The stage lighting is out of this world! ❤️🇪🇹',
-      timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString()
     }
   ]
 };
@@ -55,7 +85,8 @@ const PROHIBITED_WORDS = ['hate', 'scam', 'spam', 'pirate', 'abuse'];
 
 export class ChatService {
   static getMessages(eventId: string): ChatMessage[] {
-    return mockChatMessages[eventId] ?? [];
+    if (eventId === 'veronica-adane-live') return mockChatMessages['evt_veronica_01'] ?? [];
+    return mockChatMessages[eventId] ?? mockChatMessages['evt_veronica_01'] ?? [];
   }
 
   static postMessage(params: {

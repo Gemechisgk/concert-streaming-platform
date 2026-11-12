@@ -107,7 +107,7 @@ export default function GiftTray({ eventId, onGiftSent }: GiftTrayProps) {
 
         {/* Gift Selection Panel */}
         {isOpen && (
-          <div className="absolute bottom-12 right-0 w-80 rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-4 shadow-2xl z-40">
+          <div className="fixed inset-x-3 sm:inset-x-auto sm:absolute bottom-16 sm:bottom-12 sm:right-0 max-w-sm sm:w-80 rounded-2xl border border-line bg-surface/98 backdrop-blur-2xl p-4 shadow-2xl z-50">
             <div className="flex items-center justify-between border-b border-line pb-3 mb-3">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="size-4 text-amber-400" />

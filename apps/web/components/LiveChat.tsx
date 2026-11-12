@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Pin, Shield, Trash2, Smile, AlertCircle, Ban } from 'lucide-react';
+import { Send, Pin, Shield, Trash2, Smile, AlertCircle, Ban, Sparkles } from 'lucide-react';
 import { ChatMessage, SystemRole } from '@concert/types';
 
 interface LiveChatProps {
@@ -12,6 +12,8 @@ interface LiveChatProps {
     role: SystemRole;
   };
 }
+
+const QUICK_REACTIONS = ['👏', '🔥', '❤️', '🌹', '👑', '🇪🇹', '🎉'];
 
 export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -26,7 +28,7 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
     fetch(`/api/v1/chat?eventId=${eventId}`)
       .then(res => res.json())
       .then(data => {
-        if (data.messages) {
+        if (data.messages && data.messages.length > 0) {
           setMessages(data.messages);
           const pinned = data.messages.find((m: ChatMessage) => m.isPinned);
           if (pinned) setPinnedMessage(pinned);
@@ -49,9 +51,8 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
     return () => clearInterval(timer);
   }, [slowModeCountdown]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || slowModeCountdown > 0) return;
+  const sendMessageText = async (textToSend: string) => {
+    if (!textToSend.trim() || slowModeCountdown > 0) return;
 
     setErrorNotice(null);
     try {
@@ -61,9 +62,9 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
         body: JSON.stringify({
           eventId,
           userId: currentUser?.id || 'viewer_guest',
-          userName: currentUser?.name || 'Viewer',
+          userName: currentUser?.name || 'Abebe Bikila',
           userRole: currentUser?.role || 'VIEWER',
-          text: inputMessage.trim()
+          text: textToSend.trim()
         })
       });
 
@@ -75,10 +76,15 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
 
       setMessages(prev => [...prev, data.message]);
       setInputMessage('');
-      setSlowModeCountdown(3); // 3-second slow mode
+      setSlowModeCountdown(2); // 2-second rate limit
     } catch {
       setErrorNotice('Connection error sending chat message');
     }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendMessageText(inputMessage);
   };
 
   const handleModerate = async (action: 'PIN' | 'DELETE' | 'BAN_USER', messageId?: string, targetUserId?: string) => {
@@ -100,35 +106,40 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
     }
   };
 
-  const isModerator = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'CHAT_MODERATOR' || currentUser?.role === 'EVENT_ADMIN';
+  const isModerator =
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.role === 'EVENT_ADMIN' ||
+    currentUser?.role === 'CHAT_MODERATOR';
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-line bg-surface/95 backdrop-blur-xl overflow-hidden shadow-2xl">
+    <div className="flex flex-col h-full rounded-2xl border border-line bg-surface overflow-hidden shadow-2xl">
       {/* Chat Header */}
-      <div className="flex items-center justify-between border-b border-line px-4 py-3 bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 bg-surface-raised/80 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-          <h3 className="text-sm font-extrabold text-white tracking-wide">Live Audience Chat</h3>
+          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+          <h3 className="text-xs font-black uppercase tracking-wider text-white">Live Audience Chat</h3>
         </div>
-        <span className="text-[10px] uppercase font-bold text-muted bg-surface-raised px-2 py-0.5 rounded border border-line">
-          Real-time
-        </span>
+        <div className="flex items-center gap-1.5 text-[10px] text-muted">
+          <span className="px-2 py-0.5 rounded-full bg-surface border border-line font-mono font-bold text-emerald-400">
+            Real-Time
+          </span>
+        </div>
       </div>
 
-      {/* Pinned Announcement */}
+      {/* Pinned Message */}
       {pinnedMessage && (
-        <div className="border-b border-line/60 bg-polo-red/10 px-4 py-2.5 flex items-start gap-2.5 text-xs">
+        <div className="border-b border-line/60 bg-polo-red/10 px-4 py-2 flex items-start gap-2.5 text-xs">
           <Pin className="size-3.5 text-polo-red shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <span className="font-bold text-polo-red mr-1.5">{pinnedMessage.userName}:</span>
-            <span className="text-white font-medium">{pinnedMessage.text}</span>
+            <span className="text-neutral-200">{pinnedMessage.text}</span>
           </div>
           {isModerator && (
             <button
               onClick={() => setPinnedMessage(null)}
-              className="text-muted hover:text-white"
+              className="text-muted hover:text-white text-[10px] uppercase font-bold shrink-0 ml-1"
             >
-              ×
+              Unpin
             </button>
           )}
         </div>
@@ -136,19 +147,19 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
 
       {/* Error alert */}
       {errorNotice && (
-        <div className="px-4 py-1.5 bg-red-950/70 border-b border-red-800 text-[11px] text-red-200 flex items-center gap-1.5">
-          <AlertCircle className="size-3 text-red-400" />
-          <span>{errorNotice}</span>
+        <div className="bg-red-950/80 border-b border-red-800 px-4 py-1.5 text-[11px] text-red-300 flex items-center gap-2">
+          <AlertCircle className="size-3 text-red-400 shrink-0" />
+          <span className="truncate">{errorNotice}</span>
         </div>
       )}
 
       {/* Message Feed */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
         {messages.map((msg) => (
-          <div key={msg.id} className="group flex items-start gap-2.5 text-xs leading-relaxed">
+          <div key={msg.id} className="group flex items-start gap-2 text-xs leading-relaxed">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-bold text-neutral-200 hover:text-white cursor-pointer">
+                <span className="font-bold text-neutral-200 hover:text-white">
                   {msg.userName}
                 </span>
 
@@ -163,7 +174,7 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
                   </span>
                 ) : null}
 
-                <span className="text-[10px] text-muted ml-auto group-hover:inline-block hidden">
+                <span className="text-[10px] text-muted ml-auto hidden group-hover:inline-block">
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -204,8 +215,24 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Quick Emoji Reaction Tap Bar */}
+      <div className="flex items-center gap-1 px-3 py-1.5 bg-surface-raised border-t border-line/60 overflow-x-auto no-scrollbar">
+        <span className="text-[10px] uppercase font-bold text-muted mr-1 shrink-0">Cheer:</span>
+        {QUICK_REACTIONS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => sendMessageText(emoji)}
+            className="size-7 rounded-full bg-surface border border-line hover:border-polo-red hover:scale-110 active:scale-95 flex items-center justify-center text-sm transition-all shrink-0"
+            title={`Cheer with ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
       {/* Input Form */}
-      <form onSubmit={handleSendMessage} className="p-3 border-t border-line bg-surface">
+      <form onSubmit={handleSendMessage} className="p-2.5 border-t border-line bg-surface">
         <div className="flex items-center gap-2 rounded-xl bg-surface-raised border border-line focus-within:border-polo-red/60 px-3 py-1.5 transition-colors">
           <input
             type="text"
@@ -213,7 +240,7 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder={
               slowModeCountdown > 0
-                ? `Slow mode active (${slowModeCountdown}s)...`
+                ? `Slow mode (${slowModeCountdown}s)...`
                 : 'Send a reaction to the concert...'
             }
             maxLength={300}
@@ -223,7 +250,7 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
           <button
             type="submit"
             disabled={!inputMessage.trim() || slowModeCountdown > 0}
-            className="p-1.5 rounded-lg bg-polo-red text-white disabled:opacity-40 hover:bg-polo-red-dark transition-all"
+            className="p-1.5 rounded-lg bg-polo-red text-white disabled:opacity-40 hover:bg-polo-red-dark transition-all shrink-0"
           >
             <Send className="size-3.5" />
           </button>
