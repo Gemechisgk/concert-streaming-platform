@@ -55,7 +55,7 @@ export default function WatchEventPage() {
             id: 'ch_fallback',
             eventId: found.id,
             status: found.status === 'LIVE' ? 'LIVE' : 'OFFLINE',
-            hlsMasterUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+            hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
             qualities: [],
             primaryIngestRtmp: '',
             backupIngestRtmp: '',
@@ -148,7 +148,7 @@ export default function WatchEventPage() {
         <div className="lg:col-span-8 flex flex-col justify-between">
           <div className="flex-1 w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-line">
             <Player
-              streamUrl={channel?.hlsMasterUrl || 'https://www.youtube.com/watch?v=3cIpSCEs-n8'}
+              streamUrl={channel?.hlsMasterUrl || 'https://www.youtube.com/watch?v=mSrVwIRKASI'}
               posterUrl={event.bannerImage}
               eventName={event.title}
               isLive={isLive}

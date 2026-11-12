@@ -28,9 +28,9 @@ interface PlayerProps {
 }
 
 function extractYouTubeId(url: string): string {
-  if (!url) return '3cIpSCEs-n8';
+  if (!url) return 'mSrVwIRKASI';
   const match = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : '3cIpSCEs-n8';
+  return match ? match[1] : 'mSrVwIRKASI';
 }
 
 export default function Player({
@@ -41,9 +41,9 @@ export default function Player({
   streamToken,
   onHeartbeat
 }: PlayerProps) {
-  const isYouTubeUrl = streamUrl.includes('youtube.com') || streamUrl.includes('youtu.be') || streamUrl.includes('3cIpSCEs-n8');
-  const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>(isYouTubeUrl ? 'youtube' : 'youtube');
-  const youtubeId = extractYouTubeId(streamUrl) || '3cIpSCEs-n8';
+  const isYouTubeUrl = streamUrl.includes('youtube.com') || streamUrl.includes('youtu.be') || streamUrl.includes('mSrVwIRKASI');
+  const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>('youtube');
+  const youtubeId = extractYouTubeId(streamUrl) || 'mSrVwIRKASI';
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);

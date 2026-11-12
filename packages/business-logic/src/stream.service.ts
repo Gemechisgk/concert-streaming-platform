@@ -14,8 +14,8 @@ let mockChannels: Record<string, StreamChannel> = {
     eventId: 'evt_veronica_01',
     status: 'LIVE',
     // Live YouTube Stream Feed requested by user
-    hlsMasterUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
-    youtubeVideoUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+    hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
+    youtubeVideoUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
     fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     qualities: [
       { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
@@ -35,8 +35,8 @@ let mockChannels: Record<string, StreamChannel> = {
     id: 'ch_teddy_01',
     eventId: 'evt_teddy_afro_01',
     status: 'LIVE',
-    hlsMasterUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
-    youtubeVideoUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+    hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
+    youtubeVideoUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
     fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     qualities: [
       { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
