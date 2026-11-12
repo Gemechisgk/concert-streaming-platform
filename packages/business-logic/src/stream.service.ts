@@ -9,12 +9,13 @@ let activeSessions: Map<string, PlaybackSession> = new Map();
 
 // Mock Stream Channels
 let mockChannels: Record<string, StreamChannel> = {
-  evt_teddy_afro_01: {
-    id: 'ch_teddy_01',
-    eventId: 'evt_teddy_afro_01',
+  evt_veronica_01: {
+    id: 'ch_veronica_01',
+    eventId: 'evt_veronica_01',
     status: 'LIVE',
-    // High quality live HLS test stream with multi-bitrate capability
-    hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    // Live YouTube Stream Feed requested by user
+    hlsMasterUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+    youtubeVideoUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
     fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
     qualities: [
       { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
@@ -23,12 +24,31 @@ let mockChannels: Record<string, StreamChannel> = {
       { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_6/640x360/index.m3u8' },
       { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
     ],
-    primaryIngestRtmp: 'rtmp://localhost:1935/live/teddy_live_master',
-    backupIngestRtmp: 'rtmp://localhost:1935/live/teddy_live_backup',
-    streamKey: 'live_teddy_afro_secret_key_prim',
+    primaryIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_master',
+    backupIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_backup',
+    streamKey: 'live_veronica_secret_key_prim',
     fps: 59.94,
-    currentBitrateKbps: 4480,
-    dropFrames: 2
+    currentBitrateKbps: 4800,
+    dropFrames: 0
+  },
+  evt_teddy_afro_01: {
+    id: 'ch_teddy_01',
+    eventId: 'evt_teddy_afro_01',
+    status: 'LIVE',
+    hlsMasterUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+    youtubeVideoUrl: 'https://www.youtube.com/watch?v=3cIpSCEs-n8',
+    fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    qualities: [
+      { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
+      { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_2/1280x720/index.m3u8' },
+      { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    ],
+    primaryIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_master',
+    backupIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_backup',
+    streamKey: 'live_veronica_secret_key_prim',
+    fps: 59.94,
+    currentBitrateKbps: 4800,
+    dropFrames: 0
   },
   evt_rophnan_02: {
     id: 'ch_rophnan_02',
@@ -47,7 +67,10 @@ let mockChannels: Record<string, StreamChannel> = {
 
 export class StreamService {
   static getChannelByEventId(eventId: string): StreamChannel | null {
-    return mockChannels[eventId] ?? null;
+    if (eventId === 'evt_teddy_afro_01' || eventId === 'teddy-afro-live-in-addis') {
+      return mockChannels['evt_veronica_01'] || mockChannels['evt_teddy_afro_01'];
+    }
+    return mockChannels[eventId] ?? mockChannels['evt_veronica_01'] ?? null;
   }
 
   static authorizeStreamAccess(ticketCode: string, eventId: string, userId: string = 'viewer'): { token: string; channel: StreamChannel } {

@@ -50,7 +50,7 @@ export default function SettingsPage() {
               <label className="block text-xs font-bold text-muted mb-1.5">Email Address</label>
               <input
                 type="email"
-                defaultValue="viewer@polostreaming.com"
+                defaultValue="viewer@feshtafest.com"
                 className="w-full rounded-xl border border-line bg-surface-raised px-4 py-2.5 text-xs text-white focus:border-polo-red focus:outline-none"
               />
             </div>

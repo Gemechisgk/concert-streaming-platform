@@ -5,7 +5,7 @@ export default function TermsPage() {
       <p>Last updated: November 2026</p>
 
       <h2 className="text-base font-bold text-white pt-4">1. Digital Broadcast Passes</h2>
-      <p>Digital tickets purchased through PoloStreaming grant a non-exclusive, non-transferable, single-concurrent-stream license to view the designated live concert broadcast. Each ticket is secured with a cryptographically signed stream token.</p>
+      <p>Digital tickets purchased through Feshta Fest grant a non-exclusive, non-transferable, single-concurrent-stream license to view the designated live concert broadcast. Each ticket is secured with a cryptographically signed stream token.</p>
 
       <h2 className="text-base font-bold text-white pt-4">2. Single-Device Session Enforcement</h2>
       <p>To preserve broadcast integrity and artist intellectual property rights, each digital ticket code permits only one active stream playback session at any given moment. Initiating playback on a second device automatically invalidates the prior session.</p>

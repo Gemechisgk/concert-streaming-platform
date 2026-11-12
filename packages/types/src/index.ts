@@ -159,6 +159,7 @@ export interface StreamChannel {
   eventId: string;
   status: 'OFFLINE' | 'INGESTING' | 'LIVE' | 'ENDED';
   hlsMasterUrl: string;
+  youtubeVideoUrl?: string;
   fallbackMp4Url?: string;
   qualities: StreamQualityProfile[];
   primaryIngestRtmp: string;

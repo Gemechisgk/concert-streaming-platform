@@ -5,15 +5,15 @@ import { AppError } from '@concert/shared';
 // Initial seed events state
 let mockEvents: ConcertEvent[] = [
   {
-    id: 'evt_teddy_afro_01',
-    title: 'Teddy Afro Live in Addis: Millennium Celebration',
-    slug: 'teddy-afro-live-in-addis',
-    tagline: 'The iconic Ethiopian maestro in an unforgettable global live concert broadcast',
-    description: 'Join over 50,000 live viewers worldwide as Teddy Afro takes the grand stage at Millennium Hall in Addis Ababa with full orchestral support, performing beloved anthems and brand new tracks in ultra-high-definition.',
-    bannerImage: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=1920&auto=format&fit=crop',
+    id: 'evt_veronica_01',
+    title: "Veronica Adane Live at Feshta Fest: The Grand Concert Spectacle",
+    slug: 'veronica-adane-live',
+    tagline: "Ethiopia's vocal sensation performing live on the Feshta Fest main arena stage",
+    description: "Join tens of thousands of live viewers worldwide as Veronica Adane headlines Feshta Fest! Featuring electrifying live orchestrations of her chart-topping hits, special guest stars, full festival band, crystal-clear studio broadcast sound, and live cheering.",
+    bannerImage: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1920&auto=format&fit=crop',
     thumbnailImage: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop',
     status: 'LIVE',
-    venueName: 'Millennium Hall Main Arena',
+    venueName: 'Millennium Hall Arena (Feshta Fest Main Stage)',
     venueCity: 'Addis Ababa',
     venueCountry: 'Ethiopia',
     startTime: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
@@ -21,24 +21,24 @@ let mockEvents: ConcertEvent[] = [
     featured: true,
     artists: [
       {
-        id: 'art_teddy',
-        name: 'Teddy Afro',
-        role: 'Headlining Maestro',
-        bio: 'Tewodros Kassahun, popularly known as Teddy Afro, is an Ethiopian pop and reggae superstar whose poetic lyrics and electrifying melodies define modern Ethiopian music.',
+        id: 'art_veronica',
+        name: 'Veronica Adane',
+        role: 'Headlining Superstar',
+        bio: "Veronica Adane is one of Ethiopia's premier contemporary vocal powerhouses, known for chart-topping vocal hits, vibrant choreography, and electrifying live festival energy.",
         imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop'
       },
       {
-        id: 'art_orch',
-        name: 'Addis Symphony Orchestra',
+        id: 'art_fest_orch',
+        name: 'Feshta Symphony Orchestra',
         role: 'Guest Orchestra',
         bio: '40-piece master instrumental ensemble providing sweeping cinematic arrangements.',
         imageUrl: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=600&auto=format&fit=crop'
       }
     ],
     schedule: [
-      { id: 'sch_1', stageName: 'Main Stage', title: 'Opening Symphony & Intro', artistName: 'Addis Symphony Orchestra', startTime: '20:00', endTime: '20:30' },
-      { id: 'sch_2', stageName: 'Main Stage', title: 'Teddy Afro Live Performance Part 1', artistName: 'Teddy Afro', startTime: '20:30', endTime: '22:30' },
-      { id: 'sch_3', stageName: 'Main Stage', title: 'Acoustic Intermission & Encore', artistName: 'Teddy Afro & Guests', startTime: '22:30', endTime: '00:00' }
+      { id: 'sch_1', stageName: 'Main Stage', title: 'Feshta Fest Opening Symphony & Intro', artistName: 'Feshta Symphony Orchestra', startTime: '20:00', endTime: '20:30' },
+      { id: 'sch_2', stageName: 'Main Stage', title: 'Veronica Adane Live Concert Part 1', artistName: 'Veronica Adane', startTime: '20:30', endTime: '22:30' },
+      { id: 'sch_3', stageName: 'Main Stage', title: 'Acoustic Intermission & Grand Finale', artistName: 'Veronica Adane & Guests', startTime: '22:30', endTime: '00:00' }
     ]
   },
   {
@@ -111,10 +111,16 @@ export class EventService {
   }
 
   static getEventBySlug(slug: string): ConcertEvent | null {
+    if (slug === 'teddy-afro-live-in-addis') {
+      return mockEvents[0];
+    }
     return mockEvents.find(e => e.slug === slug) ?? null;
   }
 
   static getEventById(id: string): ConcertEvent | null {
+    if (id === 'evt_teddy_afro_01') {
+      return mockEvents[0];
+    }
     return mockEvents.find(e => e.id === id) ?? null;
   }
 

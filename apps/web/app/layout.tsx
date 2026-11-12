@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'PoloStreaming | Live Concerts, Events & Shows Worldwide',
-  description: 'Experience premier stadium and arena live concert broadcasts with studio sound, adaptive multi-bitrate video, interactive live chat, and virtual gifting.',
+  title: 'Feshta Fest | Live Concerts, Festivals & Shows Worldwide',
+  description: 'Experience premier live concert and festival broadcasts on Feshta Fest with studio-grade sound, adaptive multi-bitrate video, interactive live chat, and virtual gifting.',
   icons: {
     icon: '/favicon.ico'
   }

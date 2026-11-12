@@ -5,7 +5,56 @@ import { EventService } from './event.service';
 
 // Mock Ticket Types per Event
 let mockTicketTypes: TicketType[] = [
-  // Teddy Afro
+  // Veronica Adane Live at Feshta Fest
+  {
+    id: 'tt_veronica_early',
+    eventId: 'evt_veronica_01',
+    name: 'EARLY_BIRD',
+    displayName: 'Early Bird Live Pass',
+    description: '1080p full concert live access + 24-hr replay pass',
+    priceInCents: 25000, // 250.00 ETB
+    currency: 'ETB',
+    capacity: 5000,
+    soldCount: 5000,
+    perks: ['1080p HD live broadcast', '24-hour replay pass', 'Public live chat badge'],
+    maxPerUser: 4,
+    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() - 5 * 86400 * 1000).toISOString(),
+    isSoldOut: true
+  },
+  {
+    id: 'tt_veronica_std',
+    eventId: 'evt_veronica_01',
+    name: 'STANDARD',
+    displayName: 'Standard Live Pass',
+    description: 'High-definition live stream with real-time interactive audience chat & gift cheering',
+    priceInCents: 40000, // 400.00 ETB
+    currency: 'ETB',
+    capacity: 25000,
+    soldCount: 18450,
+    perks: ['Adaptive HD video (up to 1080p60)', 'Audience chat participation', 'Virtual gift reaction capability'],
+    maxPerUser: 6,
+    salesStartTime: new Date(Date.now() - 14 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 86400 * 1000).toISOString(),
+    isSoldOut: false
+  },
+  {
+    id: 'tt_veronica_vip',
+    eventId: 'evt_veronica_01',
+    name: 'VIP',
+    displayName: 'VIP Backstage Digital Pass',
+    description: 'Ultra-low latency stream, exclusive backstage feed, VIP gold chat badge, and 30-day VOD library access',
+    priceInCents: 90000, // 900.00 ETB
+    currency: 'ETB',
+    capacity: 3000,
+    soldCount: 2210,
+    perks: ['Spatial audio master feed', 'VIP gold chat badge', 'Multi-camera angle selector', '30-day VOD replay pass'],
+    maxPerUser: 2,
+    salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
+    isSoldOut: false
+  },
+  // Backward compatibility aliases
   {
     id: 'tt_teddy_early',
     eventId: 'evt_teddy_afro_01',
@@ -48,10 +97,10 @@ let mockTicketTypes: TicketType[] = [
     currency: 'ETB',
     capacity: 3000,
     soldCount: 2210,
-    perks: ['Ultra-low latency streaming', 'Backstage camera switcher', 'VIP Gold Chat badge', '30-day VOD replay', 'Exclusive digital commemorative lanyard'],
+    perks: ['Spatial audio master feed', 'VIP gold chat badge', 'Multi-camera angle selector', '30-day VOD replay pass'],
     maxPerUser: 2,
-    salesStartTime: new Date(Date.now() - 14 * 86400 * 1000).toISOString(),
-    salesEndTime: new Date(Date.now() + 86400 * 1000).toISOString(),
+    salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
     isSoldOut: false
   },
   // Rophnan
@@ -218,7 +267,10 @@ export class TicketService {
     if (!ticket) {
       return { valid: false, reason: 'Ticket code does not exist.' };
     }
-    if (ticket.event.id !== eventId) {
+    const isMatchingEvent = ticket.event.id === eventId || 
+                           (ticket.event.id === 'evt_teddy_afro_01' && eventId === 'evt_veronica_01') ||
+                           (ticket.event.id === 'evt_veronica_01' && eventId === 'evt_teddy_afro_01');
+    if (!isMatchingEvent) {
       return { valid: false, reason: 'Ticket is valid for a different concert event.' };
     }
     if (ticket.status !== 'ACTIVE') {

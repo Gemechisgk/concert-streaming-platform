@@ -6,19 +6,38 @@ import { User, SystemRole } from '@concert/types';
 let mockUsers: (User & { passwordHash: string })[] = [
   {
     id: 'user_admin_01',
-    email: 'admin@polostreaming.com',
-    name: 'Platform Administrator',
+    email: 'admin@feshtafest.com',
+    name: 'Feshta Fest Administrator',
     passwordHash: '$2a$10$wN31c0hJcskE86m.7v2/n.xL2nJz5h1gYj1wK9sW9y4qXf5kS2o1y', // demo pass: Admin@1234
     roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'FINANCE_MANAGER'],
     isActive: true,
     createdAt: new Date().toISOString()
   },
   {
+    id: 'user_admin_legacy',
+    email: 'admin@polostreaming.com',
+    name: 'Feshta Fest Administrator',
+    passwordHash: '$2a$10$wN31c0hJcskE86m.7v2/n.xL2nJz5h1gYj1wK9sW9y4qXf5kS2o1y',
+    roles: ['SUPER_ADMIN', 'EVENT_ADMIN', 'FINANCE_MANAGER'],
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
     id: 'user_viewer_01',
-    email: 'viewer@polostreaming.com',
+    email: 'viewer@feshtafest.com',
     name: 'Abebe Bikila',
     phoneNumber: '+251911234567',
     passwordHash: '$2a$10$wN31c0hJcskE86m.7v2/n.xL2nJz5h1gYj1wK9sW9y4qXf5kS2o1y', // demo pass: Viewer@1234
+    roles: ['VIEWER'],
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'user_viewer_legacy',
+    email: 'viewer@polostreaming.com',
+    name: 'Abebe Bikila',
+    phoneNumber: '+251911234567',
+    passwordHash: '$2a$10$wN31c0hJcskE86m.7v2/n.xL2nJz5h1gYj1wK9sW9y4qXf5kS2o1y',
     roles: ['VIEWER'],
     isActive: true,
     createdAt: new Date().toISOString()

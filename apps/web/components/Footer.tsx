@@ -9,15 +9,15 @@ export default function Footer() {
           {/* Brand Info */}
           <div className="space-y-4 md:col-span-1">
             <div className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-polo-red text-white">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-polo-red text-white">
                 <Radio className="size-4" />
               </div>
               <span className="font-black tracking-wider uppercase text-base">
-                POLO<span className="text-polo-red">STREAMING</span>
+                FESHTA<span className="text-polo-red ml-1">FEST</span>
               </span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              The premier live concert streaming platform broadcasting legendary Ethiopian and international musical experiences worldwide with studio-quality sound and ultra-low latency.
+              The premier live concert streaming platform broadcasting legendary Ethiopian and international musical festivals worldwide with studio-quality sound and ultra-low latency.
             </p>
           </div>
 
@@ -61,7 +61,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 border-t border-line/50 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-muted gap-4">
-          <p>© {new Date().getFullYear()} PoloStreaming Platform. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Feshta Fest Platform. All rights reserved.</p>
           <p className="flex items-center gap-1">
             Engineered for high-capacity live broadcasting <Heart className="size-3 text-polo-red inline fill-polo-red" />
           </p>

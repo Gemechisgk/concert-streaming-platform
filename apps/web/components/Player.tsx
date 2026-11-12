@@ -13,7 +13,9 @@ import {
   RefreshCw,
   AlertCircle,
   Radio,
-  Wifi
+  Wifi,
+  ExternalLink,
+  Layers
 } from 'lucide-react';
 
 interface PlayerProps {
@@ -25,6 +27,12 @@ interface PlayerProps {
   onHeartbeat?: () => void;
 }
 
+function extractYouTubeId(url: string): string {
+  if (!url) return '3cIpSCEs-n8';
+  const match = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : '3cIpSCEs-n8';
+}
+
 export default function Player({
   streamUrl,
   posterUrl,
@@ -33,6 +41,10 @@ export default function Player({
   streamToken,
   onHeartbeat
 }: PlayerProps) {
+  const isYouTubeUrl = streamUrl.includes('youtube.com') || streamUrl.includes('youtu.be') || streamUrl.includes('3cIpSCEs-n8');
+  const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>(isYouTubeUrl ? 'youtube' : 'youtube');
+  const youtubeId = extractYouTubeId(streamUrl) || '3cIpSCEs-n8';
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -41,22 +53,34 @@ export default function Player({
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [qualities, setQualities] = useState<string[]>([]);
+  const [qualities, setQualities] = useState<string[]>(['1080p', '720p', '480p']);
   const [currentQualityIndex, setCurrentQualityIndex] = useState<number>(-1); // -1 = Auto
   const [showSettings, setShowSettings] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize HLS player
+  // Initialize HLS player when sourceMode is HLS
   useEffect(() => {
+    if (sourceMode !== 'hls') {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
     setIsLoading(true);
     setHasError(false);
+
+    const targetHlsUrl = isYouTubeUrl
+      ? 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
+      : streamUrl;
 
     if (Hls.isSupported()) {
       const hls = new Hls({
@@ -68,13 +92,13 @@ export default function Player({
       });
 
       hlsRef.current = hls;
-      hls.loadSource(streamUrl);
+      hls.loadSource(targetHlsUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
         setIsLoading(false);
         const levelNames = data.levels.map(l => `${l.height}p`);
-        setQualities(levelNames);
+        if (levelNames.length > 0) setQualities(levelNames);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -82,24 +106,21 @@ export default function Player({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('Network error encountered, attempting recovery...');
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('Media decode error, attempting recovery...');
               hls.recoverMediaError();
               break;
             default:
               setHasError(true);
-              setErrorMessage('The live stream feed is currently reconnecting or offline.');
+              setErrorMessage('The live stream feed is currently reconnecting.');
               hls.destroy();
               break;
           }
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari HLS
-      video.src = streamUrl;
+      video.src = targetHlsUrl;
       video.addEventListener('loadedmetadata', () => {
         setIsLoading(false);
       });
@@ -111,11 +132,10 @@ export default function Player({
         hlsRef.current = null;
       }
     };
-  }, [streamUrl]);
+  }, [sourceMode, streamUrl, isYouTubeUrl]);
 
-  // Periodic heartbeat reporting
+  // Periodic heartbeat reporting for single active session enforcement
   useEffect(() => {
-    if (!isPlaying) return;
     const interval = setInterval(() => {
       if (onHeartbeat) onHeartbeat();
       if (streamToken) {
@@ -128,7 +148,7 @@ export default function Player({
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, streamToken, onHeartbeat]);
+  }, [streamToken, onHeartbeat]);
 
   const togglePlay = () => {
     const video = videoRef.current;
@@ -181,14 +201,14 @@ export default function Player({
     if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
     controlsTimeout.current = setTimeout(() => {
       if (isPlaying) setControlsVisible(false);
-    }, 3000);
+    }, 3500);
   };
 
   const retryPlayback = () => {
     setHasError(false);
     setIsLoading(true);
     if (hlsRef.current) {
-      hlsRef.current.loadSource(streamUrl);
+      hlsRef.current.loadSource(isYouTubeUrl ? 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' : streamUrl);
       hlsRef.current.startLoad();
     }
   };
@@ -199,150 +219,187 @@ export default function Player({
       onMouseMove={handleMouseMove}
       className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-2xl select-none group border border-line"
     >
-      {/* Video Element */}
-      <video
-        ref={videoRef}
-        poster={posterUrl}
-        playsInline
-        onClick={togglePlay}
-        className="size-full object-contain cursor-pointer"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-      />
-
-      {/* Loading Spinner */}
-      {isLoading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20">
-          <RefreshCw className="size-10 text-polo-red animate-spin mb-3" />
-          <span className="text-xs font-bold text-white tracking-wider uppercase">Connecting to Stage Origin...</span>
+      {/* 1. YouTube Live Feed Embed */}
+      {sourceMode === 'youtube' ? (
+        <div className="relative size-full overflow-hidden bg-black">
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=0&controls=1&enablejsapi=1&playsinline=1&rel=0&modestbranding=1`}
+            title={eventName}
+            className="size-full border-0 rounded-2xl"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
         </div>
-      )}
+      ) : (
+        /* 2. Low Latency HLS Player */
+        <div className="relative size-full">
+          <video
+            ref={videoRef}
+            poster={posterUrl}
+            playsInline
+            onClick={togglePlay}
+            className="size-full object-contain cursor-pointer"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
 
-      {/* Stream Failure / Offline Overlay */}
-      {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-30 p-6 text-center">
-          <AlertCircle className="size-12 text-polo-red mb-3" />
-          <h3 className="text-base font-bold text-white mb-1">Broadcast Signal Reconnecting</h3>
-          <p className="text-xs text-muted max-w-md mb-4">{errorMessage}</p>
-          <button
-            onClick={retryPlayback}
-            className="inline-flex items-center gap-2 rounded-full bg-polo-red px-5 py-2 text-xs font-bold text-white hover:bg-polo-red-dark transition-all"
+          {isLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20">
+              <RefreshCw className="size-10 text-polo-red animate-spin mb-3" />
+              <span className="text-xs font-bold text-white tracking-wider uppercase">
+                Connecting to Feshta Fest Stage Origin...
+              </span>
+            </div>
+          )}
+
+          {hasError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-30 p-6 text-center">
+              <AlertCircle className="size-12 text-polo-red mb-3" />
+              <h3 className="text-base font-bold text-white mb-1">Broadcast Signal Reconnecting</h3>
+              <p className="text-xs text-muted max-w-md mb-4">{errorMessage}</p>
+              <button
+                onClick={retryPlayback}
+                className="inline-flex items-center gap-2 rounded-full bg-polo-red px-5 py-2 text-xs font-bold text-white hover:bg-polo-red-dark transition-all"
+              >
+                <RefreshCw className="size-3.5" />
+                <span>Retry Connection</span>
+              </button>
+            </div>
+          )}
+
+          {/* HLS Native Bottom Controls */}
+          <div
+            className={`absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 z-10 flex items-center justify-between ${
+              controlsVisible || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
           >
-            <RefreshCw className="size-3.5" />
-            <span>Retry Connection</span>
-          </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={togglePlay}
+                className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 fill-white" />}
+              </button>
+
+              <div className="flex items-center gap-2 group/vol">
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
+                >
+                  {isMuted || volume === 0 ? <VolumeX className="size-5 text-polo-red" /> : <Volume2 className="size-5" />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  className="w-16 sm:w-24 accent-polo-red h-1 bg-white/30 rounded-lg cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 relative">
+              <div className="relative">
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-white hover:bg-white/20 transition-colors"
+                  title="Stream Quality"
+                >
+                  <Settings className="size-4" />
+                  <span className="text-[11px]">
+                    {currentQualityIndex === -1 ? 'Auto' : qualities[currentQualityIndex] || 'Auto'}
+                  </span>
+                </button>
+
+                {showSettings && (
+                  <div className="absolute bottom-10 right-0 w-36 rounded-xl border border-line bg-surface/95 backdrop-blur-xl p-2 shadow-2xl z-30">
+                    <span className="block px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
+                      Quality Profile
+                    </span>
+                    <button
+                      onClick={() => selectQuality(-1)}
+                      className={`w-full text-left px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                        currentQualityIndex === -1 ? 'bg-polo-red text-white' : 'text-foreground hover:bg-surface-raised'
+                      }`}
+                    >
+                      Auto (Adaptive)
+                    </button>
+                    {qualities.map((q, idx) => (
+                      <button
+                        key={q}
+                        onClick={() => selectQuality(idx)}
+                        className={`w-full text-left px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                          currentQualityIndex === idx ? 'bg-polo-red text-white' : 'text-foreground hover:bg-surface-raised'
+                        }`}
+                      >
+                        {q} HD
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={toggleFullscreen}
+                className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Header Overlay (Stream Title & Live badge) */}
+      {/* Header Stream Bar & Source Switcher */}
       <div
-        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/30 to-transparent transition-opacity duration-300 z-10 flex items-center justify-between ${
-          controlsVisible || !isPlaying ? 'opacity-100' : 'opacity-0'
+        className={`absolute top-0 inset-x-0 p-3.5 bg-gradient-to-b from-black/90 via-black/40 to-transparent transition-opacity duration-300 z-20 flex items-center justify-between ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {isLive && (
-            <span className="flex items-center gap-1.5 rounded-full bg-polo-red px-2.5 py-0.5 text-[11px] font-black uppercase text-white tracking-wider animate-live-badge">
+            <span className="flex items-center gap-1.5 rounded-full bg-polo-red px-2.5 py-0.5 text-[10px] font-black uppercase text-white tracking-wider animate-live-badge shadow-lg shadow-polo-red/30">
               <span className="size-1.5 rounded-full bg-white animate-ping" />
               LIVE
             </span>
           )}
-          <span className="text-xs font-bold text-white tracking-wide truncate max-w-xs sm:max-w-md">
+          <span className="text-xs font-extrabold text-white tracking-wide truncate max-w-xs sm:max-w-md drop-shadow">
             {eventName}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-emerald-400 bg-surface/80 backdrop-blur-md px-3 py-1 rounded-full border border-line">
-          <Wifi className="size-3" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Low-Latency Mode</span>
-        </div>
-      </div>
-
-      {/* Bottom Controls Bar */}
-      <div
-        className={`absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 z-10 flex items-center justify-between ${
-          controlsVisible || !isPlaying ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        {/* Left: Play/Pause, Volume */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={togglePlay}
-            className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
-            title={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 fill-white" />}
-          </button>
-
-          <div className="flex items-center gap-2 group/vol">
+        {/* Stream Source Selector */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-black/70 backdrop-blur-md p-1 rounded-full border border-line shadow-xl">
             <button
-              onClick={toggleMute}
-              className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
+              type="button"
+              onClick={() => setSourceMode('youtube')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${
+                sourceMode === 'youtube'
+                  ? 'bg-polo-red text-white shadow-md shadow-polo-red/30 scale-100'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
             >
-              {isMuted || volume === 0 ? <VolumeX className="size-5 text-polo-red" /> : <Volume2 className="size-5" />}
+              <Radio className="size-3 animate-pulse" />
+              <span>Veronica Live Feed</span>
             </button>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={isMuted ? 0 : volume}
-              onChange={handleVolumeChange}
-              className="w-16 sm:w-24 accent-polo-red h-1 bg-white/30 rounded-lg cursor-pointer"
-            />
-          </div>
-        </div>
-
-        {/* Right: Quality, Settings, Fullscreen */}
-        <div className="flex items-center gap-2 relative">
-          {/* Quality Selector */}
-          <div className="relative">
             <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-white hover:bg-white/20 transition-colors"
-              title="Stream Quality"
+              type="button"
+              onClick={() => setSourceMode('hls')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${
+                sourceMode === 'hls'
+                  ? 'bg-polo-red text-white shadow-md shadow-polo-red/30 scale-100'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
             >
-              <Settings className="size-4" />
-              <span className="text-[11px]">
-                {currentQualityIndex === -1 ? 'Auto' : qualities[currentQualityIndex] || 'Auto'}
-              </span>
+              <Wifi className="size-3" />
+              <span>Low-Latency HLS</span>
             </button>
-
-            {showSettings && (
-              <div className="absolute bottom-10 right-0 w-36 rounded-xl border border-line bg-surface/95 backdrop-blur-xl p-2 shadow-2xl z-30">
-                <span className="block px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
-                  Quality Profile
-                </span>
-                <button
-                  onClick={() => selectQuality(-1)}
-                  className={`w-full text-left px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                    currentQualityIndex === -1 ? 'bg-polo-red text-white' : 'text-foreground hover:bg-surface-raised'
-                  }`}
-                >
-                  Auto (Adaptive)
-                </button>
-                {qualities.map((q, idx) => (
-                  <button
-                    key={q}
-                    onClick={() => selectQuality(idx)}
-                    className={`w-full text-left px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                      currentQualityIndex === idx ? 'bg-polo-red text-white' : 'text-foreground hover:bg-surface-raised'
-                    }`}
-                  >
-                    {q} HD
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
-
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 rounded-full text-white hover:bg-white/20 transition-colors"
-            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          >
-            {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
-          </button>
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { Shield, ArrowRight, Loader2, KeyRound } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@polostreaming.com');
+  const [email, setEmail] = useState('admin@feshtafest.com');
   const [password, setPassword] = useState('Admin@1234');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              setEmail('admin@polostreaming.com');
+              setEmail('admin@feshtafest.com');
               setPassword('Admin@1234');
             }}
             className="text-polo-red hover:underline"
@@ -99,7 +99,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              setEmail('viewer@polostreaming.com');
+              setEmail('viewer@feshtafest.com');
               setPassword('Viewer@1234');
             }}
             className="text-neutral-400 hover:underline"

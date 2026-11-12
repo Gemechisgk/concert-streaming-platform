@@ -5,7 +5,7 @@ export default function PrivacyPage() {
       <p>Last updated: November 2026</p>
 
       <h2 className="text-base font-bold text-white pt-4">1. Data Collection</h2>
-      <p>PoloStreaming collects minimal user information strictly necessary for ticket pass fulfillment, payment verification, and stream quality telemetry (bitrate, frame drops, buffer health).</p>
+      <p>Feshta Fest collects minimal user information strictly necessary for ticket pass fulfillment, payment verification, and stream quality telemetry (bitrate, frame drops, buffer health).</p>
 
       <h2 className="text-base font-bold text-white pt-4">2. Cookies & Session Security</h2>
       <p>We utilize HttpOnly, Secure, SameSite cookies for authentication tokens. We do not sell user data or share attendee records with third-party advertising networks.</p>

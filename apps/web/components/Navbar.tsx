@@ -12,16 +12,16 @@ export default function Navbar() {
       <div className="relative mx-auto flex h-18 max-w-7xl items-center justify-between px-5 sm:px-8 py-3">
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-polo-red text-white shadow-lg shadow-polo-red/20 group-hover:scale-105 transition-transform">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-rose-600 to-polo-red text-white shadow-lg shadow-polo-red/30 group-hover:scale-105 transition-transform">
             <Radio className="size-5 animate-pulse" />
           </div>
           <div className="flex flex-col">
             <span className="text-lg font-black tracking-wider uppercase leading-none">
-              <span className="text-white">POLO</span>
-              <span className="text-polo-red">STREAMING</span>
+              <span className="text-white">FESHTA</span>
+              <span className="text-polo-red ml-1.5">FEST</span>
             </span>
             <span className="text-[10px] uppercase tracking-widest text-muted font-bold mt-1">
-              Live Concerts · Global Broadcast
+              Live Concerts · Festival Broadcast
             </span>
           </div>
         </Link>

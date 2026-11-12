@@ -24,16 +24,16 @@ export default function AdminLayout({
         <div className="space-y-6">
           {/* Admin Header */}
           <div className="flex items-center gap-2.5 pb-6 border-b border-line">
-            <div className="size-9 rounded-xl bg-polo-red flex items-center justify-center text-white shadow-lg shadow-polo-red/20">
+            <div className="size-9 rounded-xl bg-gradient-to-br from-amber-500 to-polo-red flex items-center justify-center text-white shadow-lg shadow-polo-red/20">
               <Radio className="size-4 animate-pulse" />
             </div>
             <div>
               <span className="text-sm font-black uppercase tracking-wider text-white block">
-                Polo<span className="text-polo-red">Admin</span>
+                Feshta<span className="text-polo-red ml-1">Admin</span>
               </span>
               <span className="text-[10px] uppercase font-bold text-muted flex items-center gap-1">
                 <ShieldCheck className="size-3 text-emerald-400" />
-                Staff Operations
+                Festival Operations
               </span>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function AdminLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted">Admin User: <strong className="text-white">admin@polostreaming.com</strong></span>
+            <span className="text-xs text-muted">Admin User: <strong className="text-white">admin@feshtafest.com</strong></span>
           </div>
         </header>
 
