@@ -14,8 +14,8 @@ let mockTicketTypes: TicketType[] = [
     description: '1080p full concert live access + 24-hr replay pass',
     priceInCents: 25000, // 250.00 ETB
     currency: 'ETB',
-    capacity: 5000,
-    soldCount: 5000,
+    capacity: 10000,
+    soldCount: 10000,
     perks: ['1080p HD live broadcast', '24-hour replay pass', 'Public live chat badge'],
     maxPerUser: 4,
     salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
@@ -30,8 +30,8 @@ let mockTicketTypes: TicketType[] = [
     description: 'High-definition live stream with real-time interactive audience chat & gift cheering',
     priceInCents: 40000, // 400.00 ETB
     currency: 'ETB',
-    capacity: 25000,
-    soldCount: 18450,
+    capacity: 35000,
+    soldCount: 31450,
     perks: ['Adaptive HD video (up to 1080p60)', 'Audience chat participation', 'Virtual gift reaction capability'],
     maxPerUser: 6,
     salesStartTime: new Date(Date.now() - 14 * 86400 * 1000).toISOString(),
@@ -46,8 +46,8 @@ let mockTicketTypes: TicketType[] = [
     description: 'Ultra-low latency stream, exclusive backstage feed, VIP gold chat badge, and 30-day VOD library access',
     priceInCents: 90000, // 900.00 ETB
     currency: 'ETB',
-    capacity: 3000,
-    soldCount: 2210,
+    capacity: 5000,
+    soldCount: 4210,
     perks: ['Spatial audio master feed', 'VIP gold chat badge', 'Multi-camera angle selector', '30-day VOD replay pass'],
     maxPerUser: 2,
     salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),

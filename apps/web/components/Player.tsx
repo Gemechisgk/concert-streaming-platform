@@ -130,9 +130,12 @@ export default function Player({
     };
   }, [sourceMode]);
 
-  // Periodic heartbeat reporting for single active session enforcement
+  // Adaptive jittered heartbeat reporting to smoothly distribute 50,000 concurrent viewer pulses
   useEffect(() => {
-    const interval = setInterval(() => {
+    let timer: NodeJS.Timeout;
+    const getRandomJitteredInterval = () => 28000 + Math.random() * 6000; // 28s - 34s randomized
+
+    const pulseHeartbeat = () => {
       if (onHeartbeat) onHeartbeat();
       if (streamToken) {
         fetch('/api/v1/streams/heartbeat', {
@@ -141,9 +144,11 @@ export default function Player({
           body: JSON.stringify({ streamToken, bitrateKbps: 4500 })
         }).catch(() => {});
       }
-    }, 15000);
+      timer = setTimeout(pulseHeartbeat, getRandomJitteredInterval());
+    };
 
-    return () => clearInterval(interval);
+    timer = setTimeout(pulseHeartbeat, getRandomJitteredInterval());
+    return () => clearTimeout(timer);
   }, [streamToken, onHeartbeat]);
 
   const togglePlay = () => {

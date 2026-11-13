@@ -74,7 +74,7 @@ export default function LiveChat({ eventId, currentUser }: LiveChatProps) {
         return;
       }
 
-      setMessages(prev => [...prev, data.message]);
+      setMessages(prev => [...prev.slice(-99), data.message]);
       setInputMessage('');
       setSlowModeCountdown(2); // 2-second rate limit
     } catch {

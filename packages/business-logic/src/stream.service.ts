@@ -6,6 +6,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev_stream_secret_key_antigravity_
 
 // Active in-memory playback sessions to enforce single active session policy per ticket
 let activeSessions: Map<string, PlaybackSession> = new Map();
+// O(1) reverse lookup map: ticketId -> streamToken for instantaneous duplicate session eviction at 50,000+ concurrency
+let ticketToSessionToken: Map<string, string> = new Map();
+
+// Periodic prune of expired sessions (every 60s) to keep memory bounded at high scale
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, session] of activeSessions.entries()) {
+    if (new Date(session.expiresAt).getTime() < now) {
+      activeSessions.delete(token);
+      ticketToSessionToken.delete(session.ticketId);
+    }
+  }
+}, 60000).unref?.();
 
 // Mock Stream Channels
 let mockChannels: Record<string, StreamChannel> = {
@@ -85,10 +98,11 @@ export class StreamService {
     }
 
     // Single active stream session policy per ticket holder (Blueprint Section 10)
-    // If ticket is already active in another session, terminate previous session
-    const existingSession = Array.from(activeSessions.values()).find(s => s.ticketId === verification.ticket!.id);
-    if (existingSession) {
-      activeSessions.delete(existingSession.streamToken);
+    // Instantaneous O(1) eviction for 50,000+ concurrent scale without scanning memory
+    const existingToken = ticketToSessionToken.get(verification.ticket.id);
+    if (existingToken) {
+      activeSessions.delete(existingToken);
+      ticketToSessionToken.delete(verification.ticket.id);
     }
 
     // Generate signed HMAC token with 15-min rolling expiry
@@ -106,6 +120,7 @@ export class StreamService {
     };
 
     activeSessions.set(streamToken, newSession);
+    ticketToSessionToken.set(verification.ticket.id, streamToken);
     return { token: streamToken, channel };
   }
 
@@ -117,6 +132,7 @@ export class StreamService {
     const tokenCheck = verifyStreamToken(streamToken, JWT_SECRET);
     if (!tokenCheck.valid) {
       activeSessions.delete(streamToken);
+      ticketToSessionToken.delete(session.ticketId);
       return false;
     }
 

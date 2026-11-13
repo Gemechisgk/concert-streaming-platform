@@ -80,8 +80,9 @@ let bannedUsers: Set<string> = new Set();
 // Rate limiting map: userId -> lastMessageTimestamp
 let userLastMessageTimes: Map<string, number> = new Map();
 
-// Filtered profanity words list
+// Filtered profanity words list & pre-compiled RegExp trie for ultra-fast single-pass scanning under 50k load
 const PROHIBITED_WORDS = ['hate', 'scam', 'spam', 'pirate', 'abuse'];
+const PROHIBITED_WORDS_REGEX = new RegExp(`\\b(${PROHIBITED_WORDS.join('|')})\\b`, 'gi');
 
 export class ChatService {
   static getMessages(eventId: string): ChatMessage[] {
@@ -107,12 +108,8 @@ export class ChatService {
       throw new AppError('You are chatting too fast. Please wait a moment.', 429, 'SLOW_MODE');
     }
 
-    // Word filter
-    let cleanedText = params.text;
-    for (const badWord of PROHIBITED_WORDS) {
-      const regex = new RegExp(`\\b${badWord}\\b`, 'gi');
-      cleanedText = cleanedText.replace(regex, '***');
-    }
+    // High-speed single-pass word filter
+    const cleanedText = params.text.replace(PROHIBITED_WORDS_REGEX, '***');
 
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

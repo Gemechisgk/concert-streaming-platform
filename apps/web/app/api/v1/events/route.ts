@@ -8,7 +8,14 @@ export async function GET(request: Request) {
   const featuredOnly = searchParams.get('featured') === 'true';
 
   const events = EventService.getEvents({ status, featuredOnly });
-  return NextResponse.json({ events });
+  return NextResponse.json(
+    { events },
+    {
+      headers: {
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30'
+      }
+    }
+  );
 }
 
 export async function POST(request: Request) {

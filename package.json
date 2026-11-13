@@ -17,6 +17,7 @@
     "typecheck": "turbo run typecheck",
     "test": "tsx --test tests/integration/core-platform.test.ts",
     "test:load": "tsx tests/load/stream-load-10k.ts",
+    "test:load:50k": "tsx tests/load/stream-load-50k.ts",
     "db:generate": "pnpm --filter @concert/database db:generate",
     "db:push": "pnpm --filter @concert/database db:push",
     "db:seed": "pnpm --filter @concert/database db:seed",
