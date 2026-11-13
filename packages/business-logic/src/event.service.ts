@@ -10,8 +10,8 @@ let mockEvents: ConcertEvent[] = [
     slug: 'veronica-adane-live',
     tagline: "Ethiopia's vocal sensation performing live on the Feshta Fest main arena stage",
     description: "Join tens of thousands of live viewers worldwide as Veronica Adane headlines Feshta Fest! Featuring electrifying live orchestrations of her chart-topping hits, special guest stars, full festival band, crystal-clear studio broadcast sound, and live cheering.",
-    bannerImage: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1920&auto=format&fit=crop',
-    thumbnailImage: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop',
+    bannerImage: '/meteriyaye-concert.png',
+    thumbnailImage: '/meteriyaye-concert.png',
     status: 'LIVE',
     venueName: 'Millennium Hall Arena (Feshta Fest Main Stage)',
     venueCity: 'Addis Ababa',
@@ -25,7 +25,7 @@ let mockEvents: ConcertEvent[] = [
         name: 'Veronica Adane',
         role: 'Headlining Superstar',
         bio: "Veronica Adane is one of Ethiopia's premier contemporary vocal powerhouses, known for chart-topping vocal hits, vibrant choreography, and electrifying live festival energy.",
-        imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop'
+        imageUrl: '/meteriyaye-concert.png'
       },
       {
         id: 'art_fest_orch',

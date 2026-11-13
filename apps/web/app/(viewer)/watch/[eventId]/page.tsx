@@ -183,7 +183,7 @@ export default function WatchEventPage() {
               <h3 className="text-xs font-black uppercase tracking-wider text-muted">Headlining Artist</h3>
               <div className="mt-2 flex items-center gap-3">
                 <img
-                  src={event.artists[0]?.imageUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop'}
+                  src={event.artists[0]?.imageUrl || '/meteriyaye-concert.png'}
                   alt={event.artists[0]?.name || 'Artist'}
                   className="size-12 rounded-full object-cover border border-polo-red/50 shadow-md"
                 />
@@ -260,7 +260,7 @@ export default function WatchEventPage() {
               {/* Artist Profile */}
               <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-raised border border-line">
                 <img
-                  src={event.artists[0]?.imageUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop'}
+                  src={event.artists[0]?.imageUrl || '/meteriyaye-concert.png'}
                   alt={event.artists[0]?.name || 'Artist'}
                   className="size-14 rounded-full object-cover border-2 border-polo-red"
                 />

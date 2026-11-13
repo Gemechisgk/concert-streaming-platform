@@ -13,12 +13,12 @@ export default function HomePage() {
     <div className="relative">
       {/* Hero Section */}
       <section className="relative min-h-[85vh] flex items-center justify-center overflow-hidden border-b border-line">
-        {/* Background Backdrop Image */}
+        {/* Background Backdrop Animated GIF */}
         <div className="absolute inset-0 z-0">
           <img
-            src={liveEvent.bannerImage}
+            src="/hero-concert-reveal.gif"
             alt={liveEvent.title}
-            className="size-full object-cover object-center filter brightness-40 scale-105"
+            className="size-full object-cover object-center filter brightness-45 scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-r from-background via-background/40 to-transparent" />
