@@ -30,10 +30,13 @@ function calculatePercentiles(latencies: number[]): { p50: number; p95: number; 
 }
 
 async function run50kViewerSimulation() {
+  const os = await import('node:os');
   console.log('========================================================================');
   console.log(' FESHTA FEST LIVE PLATFORM — 50,000 CONCURRENT VIEWERS LOAD BENCHMARK');
-  console.log(' Target Capacity: 50,000 Simultaneous Live Playback Sessions');
-  console.log(' Master Blueprint Reference: Section 1.1, Section 10, Section 13');
+  console.log(' Scope: In-Process Domain Logic, Cryptographic Session & Concurrency Engine');
+  console.log(` Environment: Node.js ${process.version} (${process.platform}-${process.arch}) | ${os.cpus().length} vCPUs | ${os.cpus()[0]?.model || 'CPU'}`);
+  console.log(' NOTE: Measures in-memory algorithmic execution & data structure throughput.');
+  console.log('       Network latency (HTTP/TLS/CDN) is reported separately in ARCHITECTURE.md');
   console.log('========================================================================\n');
 
   const TARGET_VIEWERS = 50000;

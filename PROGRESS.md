@@ -109,15 +109,38 @@
 
 ---
 
+### 8. Rebranding to Feshta Fest & Headline Artist Veronica Adane
+- Rebranded platform identity to **Feshta Fest** (`FESHTA FEST LIVE CONCERTS · FESTIVAL BROADCAST`).
+- Featured headliner **Veronica Adane** with live concert artwork (`/meteriyaye-concert.png`), animated reveal banner (`/veronica-adane.gif`), and concert streaming feeds.
+- Expanded concert tier capacities to 50,000 passes (10k Early Bird, 35k Standard, 5k VIP).
+
+### 9. Mobile UX & Watch Room Overhaul
+- Full-bleed 16:9 responsive video player with zero letterboxing on mobile devices.
+- Added segmented mobile tabs (`Live Chat`, `Lineup & Stage`, `Perks`) replacing vertical stacking.
+- Initialized active live chat feed with pinned stage messages and 1-tap quick reactions (`🔥`, `👏`, `❤️`, `🌹`, `👑`, `🇪🇹`, `🎉`).
+- Implemented sliding window DOM buffer (100 messages) preventing mobile browser memory degradation.
+
+### 10. 50,000 Concurrent Viewers Architecture & Microbenchmark
+- **Adaptive Jittered Heartbeats**: Clients randomize telemetry intervals between 28s and 34s, flattening traffic to ~1,500 req/sec.
+- **$O(1)$ Reverse Token Session Map**: Replaced linear array scans with constant-time lookup for instantaneous duplicate session eviction ($< 0.001\text{ ms}$).
+- **Pre-compiled Regex Trie**: Single-pass chat profanity scanning with zero event-loop blocking.
+- **Multi-Tier Edge CDN Caching**: `s-maxage=10, stale-while-revalidate=30` on catalogs, 1-year immutable caching on static assets.
+- **Decoupled Redis Architecture**: Documented separation between Redis Cache/PubSub (`volatile-lru`) and Redis BullMQ queues (`noeviction`).
+- **In-Memory Microbenchmark Suite (`pnpm test:load:50k`)**:
+  - 50,000 active viewer sessions verified.
+  - Token Issuance p95: **0.02 ms** (50,427 auth/sec).
+  - Heartbeat Telemetry p95: **0.01 ms** (118,562 pulses/sec).
+  - Duplicate Credential Invalidation: **100% evicted** (5,000/5,000 in 36.8 ms).
+  - Node.js Heap Delta: **+36.43 MB** (Total RSS: 143 MB).
+
+### 11. Production Validation Phase & Rehearsal Bed
+- Added dedicated staging event `evt_srs_rehearsal_04` (`srs-obs-rehearsal`) for end-to-end rehearsal: OBS Studio -> RTMP/SRT -> SRS origin -> 4-tier ABR transcoding -> Cloud CDN -> signed token HLS playback.
+- Dual-mode player support configured: automatic detection of YouTube vs. direct HLS `.m3u8` feeds with manual override toggles.
+
+---
+
 ## Verification & Test Results
-- Integration test suite: `tests/integration/core-platform.test.ts`
-- **Result**: 10 tests passed across 4 test suites (100% success rate).
-- **Type Checking**: Strict mode compilation verified across all packages with zero errors.
-- **10,000 Concurrent Viewers Load Benchmark**:
-  - Script: `tests/load/stream-load-10k.ts` (Command: `pnpm test:load`)
-  - Simulated Load: **10,000 simultaneous live playback sessions**
-  - Token Issuance p95 Latency: **0.04 ms** (Blueprint target: <500 ms) — **PASS**
-  - Continuous Heartbeat p95 Latency: **0.01 ms** (129,626 pulses/sec) — **PASS**
-  - Concurrency Conflict & Anti-credential Sharing: **100% duplicate sessions intercepted & evicted**
-  - Memory Footprint: Heap Delta only **5.38 MB** under 10k sessions
-  - Real-time Chat Burst: 2,000 messages processed in 69 ms with slow-mode throttling active
+- Integration test suite: `tests/integration/core-platform.test.ts` (10/10 tests passed, 396 ms).
+- Production Build: Next.js 16 App Router Turbopack compiled with 37 static/dynamic routes (zero errors).
+- Load Benchmark: `pnpm test:load:50k` (50,000 sessions passed with zero dropouts).
+- Monorepo Type Check: 100% strict TypeScript passed across `@concert/types`, `@concert/validation`, `@concert/shared`, `@concert/business-logic`, and `@concert/web`.

@@ -47,6 +47,20 @@ pnpm dev
 - **HLS Segments**: 2-second chunks (`.ts` / `.m4s`) with 3-segment sliding playlists cached at edge CDN nodes.
 - **Bandwidth Projection**: 50,000 viewers averaging 2.5 Mbps consumes ~125 Gbps aggregate egress, handled through Cloudflare or CloudFront.
 
-### 4. Database & Caching Tier
-- **PostgreSQL**: Min 4 vCPU, 16 GB RAM with PgBouncer connection pooling (max 200 server connections).
-- **Redis**: Clustered Redis instance with persistence disabled on pub/sub channels and memory limit set with `allkeys-lru`.
+### 4. Database & Redis Queue / Cache Topology
+
+#### A. PostgreSQL 16 (Relational Ledger & Orders)
+- **Sizing**: Min 4 vCPU, 16 GB RAM with PgBouncer connection pooling (max 200 server connections).
+- **Workload**: Transactional ticket purchases, order checkout, double-entry gift ledger records, and user authentication.
+
+#### B. Redis Realtime & Cache Tier (Ephemeral)
+- **Purpose**: Socket.IO Redis Adapter for live chat room broadcasts, transient session caches, and rate-limiting counters.
+- **Eviction Policy**: `maxmemory-policy: volatile-lru` (or `allkeys-lru`).
+- **Cluster**: 3-node primary/replica Redis cluster.
+
+#### C. Redis BullMQ Queue Tier (Dedicated & Persistent — NO EVICTION)
+> [!IMPORTANT]
+> **BullMQ strictly requires `noeviction`**: If Redis evicts keys used by BullMQ under memory pressure, queue jobs, locks, and task trees will be permanently lost or corrupted.
+- **Instance**: Dedicated Redis 7 instance separated from cache/pubsub workloads.
+- **Eviction Policy**: `maxmemory-policy: noeviction`.
+- **Persistence**: `appendonly yes` with `appendfsync everysec` to guarantee queue durability across restarts.

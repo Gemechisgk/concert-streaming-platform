@@ -26,10 +26,10 @@ interface PlayerProps {
   onHeartbeat?: () => void;
 }
 
-function extractYouTubeId(url: string): string {
-  if (!url) return 'mSrVwIRKASI';
+function extractYouTubeId(url: string): string | null {
+  if (!url) return null;
   const match = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : 'mSrVwIRKASI';
+  return match ? match[1] : null;
 }
 
 export default function Player({
@@ -40,8 +40,9 @@ export default function Player({
   streamToken,
   onHeartbeat
 }: PlayerProps) {
-  const youtubeId = extractYouTubeId(streamUrl) || 'mSrVwIRKASI';
-  const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>('youtube');
+  const detectedYouTubeId = extractYouTubeId(streamUrl);
+  const youtubeId = detectedYouTubeId || 'mSrVwIRKASI';
+  const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>(detectedYouTubeId ? 'youtube' : 'hls');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -76,7 +77,9 @@ export default function Player({
     setIsLoading(true);
     setHasError(false);
 
-    const targetHlsUrl = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+    const targetHlsUrl = (streamUrl && streamUrl.includes('.m3u8'))
+      ? streamUrl
+      : 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
 
     if (Hls.isSupported()) {
       const hls = new Hls({

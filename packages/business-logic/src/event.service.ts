@@ -95,6 +95,35 @@ let mockEvents: ConcertEvent[] = [
       }
     ],
     schedule: []
+  },
+  {
+    id: 'evt_srs_rehearsal_04',
+    title: 'SRS & OBS Studio Production Pipeline Rehearsal',
+    slug: 'srs-obs-rehearsal',
+    tagline: 'Direct OBS RTMP/SRT broadcast ingest, SRS multi-bitrate ABR transcoding, and token-gated HLS delivery',
+    description: 'Dedicated staging event for full-pipeline production verification: OBS live ingest into Simple Realtime Server (SRS), 4-tier ABR transcoding (1080p, 720p, 480p, 360p), Cloud CDN caching, and cryptographically signed token HLS playback.',
+    bannerImage: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=1920&auto=format&fit=crop',
+    thumbnailImage: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=600&auto=format&fit=crop',
+    status: 'LIVE',
+    venueName: 'Feshta Fest Broadcast Operations Lab',
+    venueCity: 'Addis Ababa',
+    venueCountry: 'Ethiopia',
+    startTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    endTime: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+    featured: false,
+    artists: [
+      {
+        id: 'art_broadcast_ops',
+        name: 'Feshta Broadcast Engineering',
+        role: 'Master Control & Ingest Ops',
+        bio: 'Technical engineering team managing RTMP/SRT stage feeds, SRS origin clusters, and low-latency HLS CDN delivery.',
+        imageUrl: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?q=80&w=600&auto=format&fit=crop'
+      }
+    ],
+    schedule: [
+      { id: 'sch_srs_1', stageName: 'OBS Ingest Stage', title: 'Color Bars & Tone Soundcheck', artistName: 'Broadcast Ops', startTime: '18:00', endTime: '18:30' },
+      { id: 'sch_srs_2', stageName: 'HLS Origin Stage', title: 'ABR Quality Ladder Sync (1080p/720p/480p/360p)', artistName: 'Broadcast Ops', startTime: '18:30', endTime: '23:59' }
+    ]
   }
 ];
 

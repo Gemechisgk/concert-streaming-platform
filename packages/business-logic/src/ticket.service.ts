@@ -54,6 +54,23 @@ let mockTicketTypes: TicketType[] = [
     salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
     isSoldOut: false
   },
+  // SRS & OBS Production Rehearsal Pass
+  {
+    id: 'tt_srs_rehearsal_pass',
+    eventId: 'evt_srs_rehearsal_04',
+    name: 'VIP',
+    displayName: 'SRS Pipeline Verification Pass',
+    description: 'Full-pipeline OBS to SRS ingest, multi-bitrate ABR HLS, and signed token access pass',
+    priceInCents: 1000, // 10.00 ETB
+    currency: 'ETB',
+    capacity: 10000,
+    soldCount: 1,
+    perks: ['Low-latency HLS stream', 'Multi-bitrate ABR switcher', 'Ingest health telemetry'],
+    maxPerUser: 10,
+    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+    isSoldOut: false
+  },
   // Backward compatibility aliases
   {
     id: 'tt_teddy_early',

@@ -75,6 +75,25 @@ let mockChannels: Record<string, StreamChannel> = {
     fps: 60,
     currentBitrateKbps: 0,
     dropFrames: 0
+  },
+  evt_srs_rehearsal_04: {
+    id: 'ch_srs_rehearsal_04',
+    eventId: 'evt_srs_rehearsal_04',
+    status: 'LIVE',
+    hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    qualities: [
+      { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
+      { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_2/1280x720/index.m3u8' },
+      { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_4/854x480/index.m3u8' },
+      { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_6/640x360/index.m3u8' },
+      { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    ],
+    primaryIngestRtmp: 'rtmp://localhost:1935/live/srs_rehearsal_master',
+    backupIngestRtmp: 'rtmp://localhost:1935/live/srs_rehearsal_backup',
+    streamKey: 'dev_rehearsal_primary_stream_key',
+    fps: 60,
+    currentBitrateKbps: 4500,
+    dropFrames: 0
   }
 };
 
