@@ -6,6 +6,8 @@ import { StreamService } from '../../packages/business-logic/src/stream.service'
 import { TicketService } from '../../packages/business-logic/src/ticket.service';
 import { EventService } from '../../packages/business-logic/src/event.service';
 import { createStreamToken, verifyStreamToken } from '../../packages/shared/src/index';
+import { verifyEdgeToken } from '../../infrastructure/cdn/cloudflare-worker/src/index';
+import { verifyLambdaEdgeToken, handler as lambdaEdgeHandler } from '../../infrastructure/cdn/aws-cloudfront/lambda-edge/viewer-request';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
 const PRIMARY_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
@@ -286,6 +288,68 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
     const rangeRequestEnd = 15;
     const partialSlice = fakeSegmentBytes.subarray(rangeRequestStart, rangeRequestEnd + 1);
     assert.strictEqual(partialSlice.length, 16, 'Byte-range chunk sliced accurately');
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 10: Provider-Specific CDN Implementations (Cloudflare Worker & AWS Lambda@Edge)
+  // --------------------------------------------------------------------------
+  test('10. Provider-Specific CDN Implementations: Tested Cloudflare Worker & AWS Lambda@Edge', async () => {
+    const validToken = createStreamToken('tkt_prov_01', 'evt_srs_rehearsal_04', 'usr_cloud_viewer', JWT_SECRET);
+
+    // 1. Cloudflare Worker Edge Verifier (V8 Isolate Web Crypto)
+    const cfAuth = await verifyEdgeToken(validToken, JWT_SECRET);
+    assert.strictEqual(cfAuth.valid, true, 'Cloudflare Worker verifyEdgeToken accepts valid token');
+    assert.strictEqual(cfAuth.payload?.u, 'usr_cloud_viewer');
+
+    const cfTampered = await verifyEdgeToken(`${validToken.split('.')[0]}.invalid_sig`, JWT_SECRET);
+    assert.strictEqual(cfTampered.valid, false, 'Cloudflare Worker verifyEdgeToken rejects tampered token');
+
+    // 2. AWS CloudFront Lambda@Edge Viewer-Request Handler (Node.js runtime)
+    const lambdaAuth = verifyLambdaEdgeToken(validToken, JWT_SECRET);
+    assert.strictEqual(lambdaAuth.valid, true, 'Lambda@Edge verifyLambdaEdgeToken accepts valid token');
+
+    // Test Lambda@Edge viewer-request event handler execution
+    const mockCfEvent = {
+      Records: [{
+        cf: {
+          request: {
+            uri: '/live/abr/stream_1080p0.ts',
+            method: 'GET',
+            querystring: `token=${encodeURIComponent(validToken)}&foo=bar`,
+            headers: {}
+          }
+        }
+      }]
+    };
+
+    const edgeResult = await lambdaEdgeHandler(mockCfEvent as any);
+    assert.strictEqual('uri' in edgeResult, true, 'Authorized request is forwarded to origin');
+    if ('uri' in edgeResult) {
+      // Token must be stripped from querystring for segment cache sharing
+      assert.strictEqual(edgeResult.querystring, 'foo=bar', 'Token must be stripped from segment querystring');
+      // Origin Shield mutual header must be injected
+      assert.ok(edgeResult.headers['x-origin-shield-key'], 'Origin shield mutual header must be injected');
+    }
+
+    // Unauthorized request to Lambda@Edge
+    const mockUnauthEvent = {
+      Records: [{
+        cf: {
+          request: {
+            uri: '/live/abr/stream_1080p0.ts',
+            method: 'GET',
+            querystring: 'foo=bar',
+            headers: {}
+          }
+        }
+      }]
+    };
+    const unauthResult = await lambdaEdgeHandler(mockUnauthEvent as any);
+    assert.strictEqual('status' in unauthResult, true, 'Unauthorized request terminates with custom response');
+    if ('status' in unauthResult) {
+      assert.strictEqual(unauthResult.status, '403', 'Returns 403 Forbidden');
+      assert.strictEqual(unauthResult.headers['cache-control'][0].value.includes('no-store'), true, 'Must have no-store cache header');
+    }
   });
 
 });
