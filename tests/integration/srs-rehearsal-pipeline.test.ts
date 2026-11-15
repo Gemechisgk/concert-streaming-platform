@@ -5,9 +5,8 @@ import path from 'node:path';
 import { StreamService } from '../../packages/business-logic/src/stream.service';
 import { TicketService } from '../../packages/business-logic/src/ticket.service';
 import { EventService } from '../../packages/business-logic/src/event.service';
-import { createStreamToken, verifyStreamToken } from '../../packages/shared/src/index';
-import { verifyEdgeToken } from '../../infrastructure/cdn/cloudflare-worker/src/index';
-import { verifyLambdaEdgeToken, createViewerRequestHandler, loadEdgeConfig } from '../../infrastructure/cdn/aws-cloudfront/lambda-edge/viewer-request';
+import { createStreamToken, verifyStreamToken, generateStreamingKeyPair } from '../../packages/shared/src/index';
+import cloudflareWorker, { verifyEdgeToken } from '../../infrastructure/cdn/cloudflare-worker/src/index';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
 const PRIMARY_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
@@ -275,77 +274,99 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
   });
 
   // --------------------------------------------------------------------------
-  // TEST 10: Provider-Specific CDN Implementations (Cloudflare Worker & AWS Lambda@Edge)
+  // TEST 10: Cloudflare Worker Edge CDN Auth Gate & Asymmetric Token Signing
   // --------------------------------------------------------------------------
-  test('10. Provider-Specific CDN Implementations: Tested Cloudflare Worker & AWS Lambda@Edge', async () => {
-    const validToken = createStreamToken('tkt_prov_01', 'evt_srs_rehearsal_04', 'usr_cloud_viewer', JWT_SECRET);
+  test('10. Cloudflare Worker Edge Auth Gate: Verified Asymmetric Token Signing & Cache Policy', async () => {
+    // 1. EC P-256 Asymmetric Key Pair Generation
+    // Backend keeps privateKey; Cloudflare Worker only receives publicKey
+    const ecKeys = generateStreamingKeyPair('ec');
+    assert.ok(ecKeys.privateKey.includes('BEGIN PRIVATE KEY'), 'Backend generates standard PKCS#8 private key');
+    assert.ok(ecKeys.publicKey.includes('BEGIN PUBLIC KEY'), 'Cloudflare Worker receives standard SPKI public key');
 
-    // 1. Cloudflare Worker Edge Verifier (V8 Isolate Web Crypto)
-    const cfAuth = await verifyEdgeToken(validToken, JWT_SECRET);
-    assert.strictEqual(cfAuth.valid, true, 'Cloudflare Worker verifyEdgeToken accepts valid token');
-    assert.strictEqual(cfAuth.payload?.u, 'usr_cloud_viewer');
+    // Backend signs playback token using private key
+    const asymToken = createStreamToken('tkt_asym_01', 'evt_srs_rehearsal_04', 'usr_asym_viewer', ecKeys.privateKey);
+    assert.strictEqual(asymToken.split('.').length, 2, 'Token format is <payload>.<signature>');
 
-    const cfTampered = await verifyEdgeToken(`${validToken.split('.')[0]}.invalid_sig`, JWT_SECRET);
-    assert.strictEqual(cfTampered.valid, false, 'Cloudflare Worker verifyEdgeToken rejects tampered token');
+    // Cloudflare Worker verifies token using ONLY the public key
+    const cfAuth = await verifyEdgeToken(asymToken, ecKeys.publicKey);
+    assert.strictEqual(cfAuth.valid, true, 'Cloudflare Worker verifyEdgeToken accepts asymmetrically signed token');
+    assert.strictEqual(cfAuth.payload?.u, 'usr_asym_viewer');
+    assert.strictEqual(cfAuth.payload?.t, 'tkt_asym_01');
 
-    // 2. AWS CloudFront Lambda@Edge Viewer-Request Handler (Node.js runtime)
-    const lambdaAuth = verifyLambdaEdgeToken(validToken, JWT_SECRET);
-    assert.strictEqual(lambdaAuth.valid, true, 'Lambda@Edge verifyLambdaEdgeToken accepts valid token');
+    // Cloudflare Worker rejects tampered asymmetric token
+    const cfTampered = await verifyEdgeToken(`${asymToken.split('.')[0]}.invalid_sig`, ecKeys.publicKey);
+    assert.strictEqual(cfTampered.valid, false, 'Cloudflare Worker rejects tampered asymmetric signature');
 
-    // Test Lambda@Edge viewer-request factory with build-injected configuration
-    const edgeHandler = createViewerRequestHandler({
-      jwtSecret: JWT_SECRET,
-      originShieldSecret: 'origin_shield_secret_123'
-    });
+    // Cloudflare Worker rejects token signed with an unauthorized private key
+    const attackerKeys = generateStreamingKeyPair('ec');
+    const attackerToken = createStreamToken('tkt_asym_01', 'evt_srs_rehearsal_04', 'usr_asym_viewer', attackerKeys.privateKey);
+    const cfAttackerCheck = await verifyEdgeToken(attackerToken, ecKeys.publicKey);
+    assert.strictEqual(cfAttackerCheck.valid, false, 'Cloudflare Worker rejects token signed with rogue private key');
 
-    const mockCfEvent = {
-      Records: [{
-        cf: {
-          request: {
-            uri: '/live/abr/stream_1080p0.ts',
-            method: 'GET',
-            querystring: `token=${encodeURIComponent(validToken)}&foo=bar`,
-            headers: {}
-          }
-        }
-      }]
+    // Cloudflare Worker rejects expired asymmetric token
+    const expiredAsymToken = createStreamToken('tkt_asym_01', 'evt_srs_rehearsal_04', 'usr_asym_viewer', ecKeys.privateKey, -60);
+    const cfExpiredCheck = await verifyEdgeToken(expiredAsymToken, ecKeys.publicKey);
+    assert.strictEqual(cfExpiredCheck.valid, false, 'Cloudflare Worker rejects expired asymmetric token');
+
+    // 2. RSA 2048-Bit Asymmetric Verification
+    const rsaKeys = generateStreamingKeyPair('rsa');
+    const rsaToken = createStreamToken('tkt_rsa_01', 'evt_srs_rehearsal_04', 'usr_rsa_viewer', rsaKeys.privateKey);
+    const cfRsaAuth = await verifyEdgeToken(rsaToken, rsaKeys.publicKey);
+    assert.strictEqual(cfRsaAuth.valid, true, 'Cloudflare Worker verifyEdgeToken accepts RSA-2048 signed token');
+
+    // 3. Symmetric HMAC-SHA256 Fallback Verification
+    const hmacToken = createStreamToken('tkt_hmac_01', 'evt_srs_rehearsal_04', 'usr_hmac_viewer', JWT_SECRET);
+    const cfHmacAuth = await verifyEdgeToken(hmacToken, JWT_SECRET);
+    assert.strictEqual(cfHmacAuth.valid, true, 'Cloudflare Worker supports symmetric HMAC token verification');
+
+    // 4. Cloudflare Worker Fetch Handler Simulation
+    // Mock environment with public key only
+    const workerEnv = {
+      STREAM_SIGNING_PUBLIC_KEY: ecKeys.publicKey,
+      ORIGIN_SHIELD_HOSTNAME: 'origin-shield.concert.example.com',
+      ORIGIN_SHIELD_SECRET: 'mock_origin_shield_key_secret_456'
     };
 
-    const edgeResult = await edgeHandler(mockCfEvent as any);
-    assert.strictEqual('uri' in edgeResult, true, 'Authorized request is forwarded to origin');
-    if ('uri' in edgeResult) {
-      // Token must be stripped from querystring for segment cache sharing
-      assert.strictEqual(edgeResult.querystring, 'foo=bar', 'Token must be stripped from segment querystring');
-      // Origin Shield mutual header must be injected
-      assert.ok(edgeResult.headers['x-origin-shield-key'], 'Origin shield mutual header must be injected');
-    }
+    // Simulated unauthorized request (missing token)
+    const unauthReq = new Request('https://cdn.concert.example.com/live/abr/stream_1080p0.ts');
+    const unauthResp = await cloudflareWorker.fetch(unauthReq, workerEnv as any);
+    assert.strictEqual(unauthResp.status, 403, 'Unauthorized request denied before cache');
+    assert.strictEqual(unauthResp.headers.get('Cache-Control')?.includes('no-store'), true, 'Must have no-store cache header');
 
-    // Unauthorized request to Lambda@Edge
-    const mockUnauthEvent = {
-      Records: [{
-        cf: {
-          request: {
-            uri: '/live/abr/stream_1080p0.ts',
-            method: 'GET',
-            querystring: 'foo=bar',
-            headers: {}
-          }
+    // Simulated authorized request with asymmetrically signed token
+    // (mocking global caches.default and fetch for Worker environment)
+    let fetchedOriginUrl = '';
+    let fetchedOriginHeaders: Headers | null = null;
+    const originalFetch = global.fetch;
+    const originalCaches = (global as any).caches;
+
+    try {
+      (global as any).caches = {
+        default: {
+          match: async () => null,
+          put: async () => {}
         }
-      }]
-    };
-    const unauthResult = await edgeHandler(mockUnauthEvent as any);
-    assert.strictEqual('status' in unauthResult, true, 'Unauthorized request terminates with custom response');
-    if ('status' in unauthResult) {
-      assert.strictEqual(unauthResult.status, '403', 'Returns 403 Forbidden');
-      assert.strictEqual(unauthResult.headers['cache-control'][0].value.includes('no-store'), true, 'Must have no-store cache header');
-    }
+      };
+      global.fetch = async (input: any, init?: any) => {
+        const req = input instanceof Request ? input : new Request(input, init);
+        fetchedOriginUrl = req.url;
+        fetchedOriginHeaders = new Headers(req.headers);
+        return new Response('MOCK_TS_BINARY_SEGMENT', {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp2t' }
+        });
+      };
 
-    // Verify Lambda@Edge fails closed when configuration is missing
-    assert.throws(
-      () => loadEdgeConfig(),
-      /Missing edge-config\.json/,
-      'Lambda@Edge fails closed if edge-config.json is missing'
-    );
+      const authReq = new Request(`https://cdn.concert.example.com/live/abr/stream_1080p0.ts?token=${encodeURIComponent(asymToken)}`);
+      const authResp = await cloudflareWorker.fetch(authReq, workerEnv as any);
+
+      assert.strictEqual(authResp.status, 200, 'Authorized request successfully passes edge gate');
+      assert.strictEqual(fetchedOriginUrl.startsWith('https://origin-shield.concert.example.com'), true, 'Request forwarded to explicit origin shield');
+      assert.strictEqual(fetchedOriginHeaders?.get('x-origin-shield-key'), 'mock_origin_shield_key_secret_456', 'Origin shield mutual secret attached');
+    } finally {
+      global.fetch = originalFetch;
+      (global as any).caches = originalCaches;
+    }
   });
 
 });

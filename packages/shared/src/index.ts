@@ -21,14 +21,43 @@ export function generateTicketCode(eventId: string, ticketTypeId: string, sequen
 }
 
 /**
- * Creates a cryptographically signed HMAC-SHA256 stream playback token.
- * Payload expiry `exp` is formatted as standard JWT NumericDate in UNIX SECONDS (RFC 7519 §4.1.4).
+ * Generates an asymmetric cryptographic key pair for stream playback tokens.
+ * Default is EC (P-256 / prime256v1) providing compact signatures, with RSA 2048-bit option.
+ */
+export function generateStreamingKeyPair(type: 'ec' | 'rsa' = 'ec'): { publicKey: string; privateKey: string } {
+  if (type === 'ec') {
+    return crypto.generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1',
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+    });
+  }
+  return crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+}
+
+export function isAsymmetricPrivateKey(key: string): boolean {
+  return typeof key === 'string' && (key.includes('BEGIN PRIVATE KEY') || key.includes('BEGIN EC PRIVATE KEY') || key.includes('BEGIN RSA PRIVATE KEY'));
+}
+
+export function isAsymmetricPublicKey(key: string): boolean {
+  return typeof key === 'string' && (key.includes('BEGIN PUBLIC KEY') || key.includes('BEGIN RSA PUBLIC KEY'));
+}
+
+/**
+ * Creates a cryptographically signed stream playback token.
+ * Supports asymmetric signing (EC P-256 / RSA 2048) keeping the private key on the backend,
+ * or symmetric HMAC-SHA256 when a secret string is supplied.
+ * Expiry `exp` is formatted as standard JWT NumericDate in UNIX SECONDS (RFC 7519 §4.1.4).
  */
 export function createStreamToken(
   ticketId: string,
   eventId: string,
   userId: string,
-  secret: string,
+  keyOrSecret: string,
   ttlSeconds: number = 15 * 60
 ): string {
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -41,8 +70,25 @@ export function createStreamToken(
   };
 
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+
+  if (isAsymmetricPrivateKey(keyOrSecret)) {
+    // Asymmetric signing: private key stays secure on backend
+    const isEc = keyOrSecret.includes('EC') || keyOrSecret.length < 500;
+    let signatureBuffer: Buffer;
+    if (isEc) {
+      signatureBuffer = crypto.sign('sha256', Buffer.from(encodedPayload), {
+        key: keyOrSecret,
+        dsaEncoding: 'ieee-p1363'
+      });
+    } else {
+      signatureBuffer = crypto.sign('sha256', Buffer.from(encodedPayload), keyOrSecret);
+    }
+    return `${encodedPayload}.${signatureBuffer.toString('base64url')}`;
+  }
+
+  // Symmetric HMAC-SHA256 signing
   const hmacSig = crypto
-    .createHmac('sha256', secret)
+    .createHmac('sha256', keyOrSecret)
     .update(encodedPayload)
     .digest('base64url');
 
@@ -50,10 +96,10 @@ export function createStreamToken(
 }
 
 /**
- * Cryptographically verifies an HMAC-SHA256 stream playback token using constant-time comparison
- * and checks expiry against standard UNIX seconds.
+ * Cryptographically verifies a stream playback token using constant-time comparison or
+ * asymmetric public key verification, and checks expiry against standard UNIX seconds.
  */
-export function verifyStreamToken(token: string, secret: string): { valid: boolean; payload?: any; reason?: string } {
+export function verifyStreamToken(token: string, keyOrSecret: string): { valid: boolean; payload?: any; reason?: string } {
   try {
     if (!token || typeof token !== 'string') {
       return { valid: false, reason: 'Missing token' };
@@ -65,18 +111,44 @@ export function verifyStreamToken(token: string, secret: string): { valid: boole
     }
 
     const [encodedPayload, clientSig] = parts;
+    const clientSigBuf = Buffer.from(clientSig, 'base64url');
 
-    // 1. Constant-time HMAC-SHA256 verification
-    const expectedSig = crypto
-      .createHmac('sha256', secret)
-      .update(encodedPayload)
-      .digest('base64url');
+    // 1. Signature Verification
+    if (isAsymmetricPublicKey(keyOrSecret)) {
+      // Asymmetric verification via Public Key (SPKI)
+      const isEc = keyOrSecret.includes('MFkw') || keyOrSecret.length < 300;
+      let isValid = false;
+      if (isEc) {
+        isValid = crypto.verify(
+          'sha256',
+          Buffer.from(encodedPayload),
+          { key: keyOrSecret, dsaEncoding: 'ieee-p1363' },
+          clientSigBuf
+        );
+      } else {
+        isValid = crypto.verify(
+          'sha256',
+          Buffer.from(encodedPayload),
+          keyOrSecret,
+          clientSigBuf
+        );
+      }
+      if (!isValid) {
+        return { valid: false, reason: 'Invalid asymmetric cryptographic signature' };
+      }
+    } else {
+      // Symmetric HMAC-SHA256 verification (constant-time)
+      const expectedSig = crypto
+        .createHmac('sha256', keyOrSecret)
+        .update(encodedPayload)
+        .digest('base64url');
 
-    const clientBuf = Buffer.from(clientSig, 'utf8');
-    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+      const clientBuf = Buffer.from(clientSig, 'utf8');
+      const expectedBuf = Buffer.from(expectedSig, 'utf8');
 
-    if (clientBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(clientBuf, expectedBuf)) {
-      return { valid: false, reason: 'Invalid cryptographic signature' };
+      if (clientBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(clientBuf, expectedBuf)) {
+        return { valid: false, reason: 'Invalid cryptographic signature' };
+      }
     }
 
     // 2. Decode payload & check standard Unix seconds expiration

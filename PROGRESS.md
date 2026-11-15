@@ -160,11 +160,12 @@
 - **Standby Origin Redundancy**: Implemented active-standby origin pool (`SRS_ORIGIN_URL` + `SRS_STANDBY_ORIGIN_URL`) ensuring standby origin takeover without viewer disconnects.
 - **Distinguished Measured vs. Projected Targets**: Separated measured local benchmark metrics from 50,000-viewer production CDN capacity estimates.
 
-### 14. Provider-Specific Edge CDN Deployments & Gitleaks Historical Certification
-- **Cloudflare Worker Edge Gate (`infrastructure/cdn/cloudflare-worker/src/index.ts`)**: Built and verified standalone V8 isolate worker implementing pure Web Crypto `verifyEdgeToken`, normalized cache key generation (`caches.default`), and explicit origin shield routing preserving paths and injecting `X-Origin-Shield-Key`.
-- **AWS CloudFront Lambda@Edge Gate (`infrastructure/cdn/aws-cloudfront/lambda-edge/viewer-request.ts`)**: Built dedicated Node.js 20.x `viewer-request` event handler performing HMAC verification before CloudFront cache inspection, normalizing `.ts` query strings for cache sharing, and injecting origin shield headers.
-- **Dedicated Gitleaks Historical Scan**: Executed Gitleaks v8.18.2 across all Git commits, tags, and branches. Replaced dangling historical commits and achieved a **100% clean scan (0 leaks found across 18 commits)**.
-- **Automated Edge CDN Test Suite**: Added Test 10 to `srs-rehearsal-pipeline.test.ts` verifying both Cloudflare Worker and AWS Lambda@Edge handlers across authorized, unauthorized, and origin-shield routing scenarios.
+### 14. Cloudflare Worker Edge CDN & Asymmetric Cryptographic Signing
+- **Cloudflare Worker Exclusive Edge Gate (`infrastructure/cdn/cloudflare-worker/src/index.ts`)**: Built and verified standalone V8 isolate worker implementing Web Crypto asymmetric (ECDSA P-256 / RSA 2048) and HMAC verification, normalized segment cache key generation (`caches.default`), and explicit origin shield routing preserving paths and injecting `X-Origin-Shield-Key`.
+- **Asymmetric Token Signing Architecture**: Private key (`STREAM_SIGNING_PRIVATE_KEY`) is stored securely exclusively on the backend API server. Cloudflare Worker only requires the public key (`STREAM_SIGNING_PUBLIC_KEY`), preventing token forgery even under edge inspection.
+- **Removed AWS CloudFront & Dependencies**: Consolidated edge delivery solely on Cloudflare Workers, removing all AWS-specific deployment artifacts and configuration.
+- **Dedicated Gitleaks Historical Scan**: Executed Gitleaks across all Git commits, tags, and branches with zero leaks found (100% clean certification).
+- **Automated Edge CDN Test Suite**: Test 10 in `srs-rehearsal-pipeline.test.ts` thoroughly tests asymmetric token generation, public-key edge verification, forged key rejection, and origin shield routing.
 
 ---
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyStreamToken } from '@concert/shared';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
+const VERIFICATION_KEY = process.env.STREAM_SIGNING_PUBLIC_KEY || process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
 
 /**
- * Dedicated Edge CDN Subrequest Validator (Nginx auth_request / CloudFront Lambda@Edge / Cloudflare Workers)
+ * Dedicated Edge CDN Subrequest Validator (Nginx auth_request / Cloudflare Workers)
  * Validates the stream token BEFORE the CDN cache is inspected.
  * 
  * Order of operations:
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const result = verifyStreamToken(token, JWT_SECRET);
+  const result = verifyStreamToken(token, VERIFICATION_KEY);
   if (!result.valid) {
     return NextResponse.json(
       { error: 'Unauthorized: Invalid or expired stream token.', valid: false },

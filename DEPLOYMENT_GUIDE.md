@@ -3,9 +3,9 @@
 ## Prerequisites
 - Node.js >= 20.x, pnpm >= 9.x
 - Docker & Docker Compose
-- PostgreSQL 16 (or AWS RDS PostgreSQL with connection pooling / PgBouncer)
-- Redis 7 (or AWS ElastiCache / Redis Cluster)
-- Pinned SRS (Simple Realtime Server) 8.0-d3 (Build 8.0.74) or Cloudflare Stream / AWS MediaPackage
+- PostgreSQL 16 (or managed PostgreSQL with connection pooling / PgBouncer)
+- Redis 7 (or managed Redis / Redis Cluster)
+- Pinned SRS (Simple Realtime Server) 8.0-d3 (Build 8.0.74) or Cloudflare Stream
 
 ---
 
@@ -43,7 +43,7 @@ To guarantee reproducible and secure builds, the media origin server is strictly
 > **TLS & Key Hygiene**:
 > - Never check TLS private keys (`*.key`) into Git.
 > - Upstream OSSRS demo development certificates are excluded via `.gitignore`.
-> - Production TLS certificates must be provisioned externally via AWS Certificate Manager (ACM), Let's Encrypt, or Cloudflare Universal SSL.
+> - Production TLS certificates must be provisioned externally via Let's Encrypt or Cloudflare Universal SSL.
 
 ---
 
@@ -51,7 +51,7 @@ To guarantee reproducible and secure builds, the media origin server is strictly
 
 To avoid architectural conflation, our deployment topology distinguishes between:
 1. **Local Rehearsal Proxy (Nginx)**: Runs in Docker Compose for local end-to-end integration testing and simulated edge caching.
-2. **Production External CDN (Cloudflare Enterprise / AWS CloudFront)**: Multi-region Edge CDN with 300+ PoPs handling the 125 Gbps aggregate viewer egress.
+2. **Production External CDN (Cloudflare Workers)**: Multi-region Edge CDN with 300+ PoPs handling the 125 Gbps aggregate viewer egress.
 
 ### External Edge CDN Auth-Before-Cache Architecture
 
@@ -62,9 +62,9 @@ A critical vulnerability in streaming CDNs is inadvertently serving cached segme
        |
        | GET /live/abr/stream_1080p0.ts?token=<SIGNED_TOKEN>
        v
-[ External CDN Edge (Cloudflare Worker / CloudFront Function) ]
+[ External CDN Edge (Cloudflare Worker) ]
        |
-       |-- STEP 1: Verify HMAC Signature of ?token=...
+       |-- STEP 1: Verify Asymmetric / HMAC Signature of ?token=...
        |   |-- Invalid / Missing / Expired -> RETURN HTTP 403 Forbidden
        |       Headers: Cache-Control: private, no-store, max-age=0
        |       (Execution terminates immediately; cache is never touched)
@@ -146,11 +146,11 @@ To prevent malicious users from bypassing the token-gated CDN and querying the S
 
 | Metric | Measured Rehearsal Reality | Projected 50,000-Viewer Concert Target |
 | :--- | :--- | :--- |
-| **Pipeline Verification** | OBS → SRS → FFmpeg ABR → Next.js CDN Edge Gate | Global Cloudflare / AWS CloudFront Edge PoPs |
+| **Pipeline Verification** | OBS → SRS → FFmpeg ABR → Next.js CDN Edge Gate | Global Cloudflare Edge PoPs (300+ Cities) |
 | **Ingest Handover** | Active primary cut with 0 token dropouts | Dual bonded cellular + fiber RTMP/SRT uplinks |
 | **Edge Hit Ratio** | 100% token gate enforcement on cached segments | **$> 99.5\%$** target (reduces 125 Gbps to $< 625$ Mbps origin) |
 | **Origin Redundancy** | Dual-origin pool (:8080 primary + :8081 standby) | Multi-AZ active-standby origin clusters |
-| **Token Auth Latency** | Sub-millisecond HMAC verification ($< 0.1\text{ ms}$) | Cloudflare Worker / CloudFront Function ($< 5\text{ ms}$) |
+| **Token Auth Latency** | Sub-millisecond HMAC verification ($< 0.1\text{ ms}$) | Cloudflare Worker ($< 5\text{ ms}$) |
 
 ---
 

@@ -3,7 +3,7 @@ import { verifyStreamToken } from '@concert/shared';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
+const VERIFICATION_KEY = process.env.STREAM_SIGNING_PUBLIC_KEY || process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
 
 // Primary and Standby Media Origins (Origin Redundancy)
 const PRIMARY_ORIGIN = process.env.SRS_ORIGIN_URL || 'http://127.0.0.1:8080/live';
@@ -57,7 +57,7 @@ export async function GET(
     );
   }
 
-  const tokenVerification = verifyStreamToken(token, JWT_SECRET);
+  const tokenVerification = verifyStreamToken(token, VERIFICATION_KEY);
   if (!tokenVerification.valid) {
     return NextResponse.json(
       { error: 'Unauthorized: Invalid or expired stream token.', code: 'TOKEN_INVALID' },

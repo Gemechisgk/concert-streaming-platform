@@ -5,8 +5,8 @@ The platform uses a modular monolith design pattern with separated concerns acro
 
 ```
                       +---------------------------------------+
-                      |   Cloud CDN (CloudFront / Fastly)     |
-                      |   - Edge Caching (s-maxage=10, SWR)   |
+                      |       Cloudflare Workers Edge CDN     |
+                      |   - Asymmetric Auth Gate (Web Crypto) |
                       |   - Static Media & HLS Chunk Delivery |
                       +-------------------+-------------------+
                                           |
@@ -79,10 +79,10 @@ To distinguish in-memory logic performance from actual end-to-end production net
 | :--- | :--- | :--- | :--- | :--- |
 | **Tier 1: Domain Logic** | Token Auth & Session Map | **p50: 0.016 ms \| p95: 0.024 ms** | 50,427 auth/sec | In-memory microbenchmark (`pnpm test:load:50k`) on 4 vCPU Node 22 |
 | **Tier 1: Telemetry** | Active Heartbeat Check | **p50: 0.008 ms \| p95: 0.009 ms** | 118,562 pulses/sec | In-memory microbenchmark (`pnpm test:load:50k`) |
-| **Tier 2: HTTP Gateway** | Next.js API Routes via TLS | **p50: 18 ms \| p95: 42 ms \| p99: 85 ms** | ~1,600 req/sec (jittered) | 4 ECS Fargate tasks behind CloudFront edge TLS termination |
+| **Tier 2: HTTP Gateway** | Next.js API Routes via TLS | **p50: 18 ms \| p95: 42 ms \| p99: 85 ms** | ~1,600 req/sec (jittered) | 4 App Server tasks behind Cloudflare edge TLS termination |
 | **Tier 3: Redis Session** | Session verification & PubSub | **p50: 0.8 ms \| p95: 2.1 ms** | ~40,000 ops/sec | Redis 7 cluster pipelined commands over VPC private link |
 | **Tier 4: Socket.IO Cluster**| Real-time chat & gift fanout | **p50: 35 ms \| p95: 78 ms** | 50,000 active connections | Horizontally scaled across 8 realtime Node.js instances |
-| **Tier 5: HLS Video CDN** | Video Segment (.ts) delivery | **p50: 25 ms \| p95: 65 ms** | **125 Gbps aggregate egress** | CloudFront / Fastly edge POP cache hits (99.2% cache hit ratio) |
+| **Tier 5: HLS Video CDN** | Video Segment (.ts) delivery | **p50: 25 ms \| p95: 65 ms** | **125 Gbps aggregate egress** | Cloudflare Workers edge POP cache hits (99.2% cache hit ratio) |
 
 ## Module Separation
 1. **apps/web**: Next.js App Router containing public viewer-facing pages, authenticated client dashboard, streaming watch room with hls.js player, and full administrative dashboard.

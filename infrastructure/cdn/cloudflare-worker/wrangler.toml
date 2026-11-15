@@ -1,0 +1,18 @@
+name = "feshta-fest-cdn-edge"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ORIGIN_SHIELD_HOSTNAME = "origin-shield.feshtafest.com"
+ORIGIN_SHIELD_PORT = "443"
+
+# Direct live media traffic through edge auth gate
+routes = [
+  { pattern = "cdn.feshtafest.com/live/*", zone_name = "feshtafest.com" }
+]
+
+# Note: STREAM_SIGNING_PUBLIC_KEY and ORIGIN_SHIELD_SECRET must be configured
+# as encrypted secrets via:
+# wrangler secret put STREAM_SIGNING_PUBLIC_KEY
+# wrangler secret put ORIGIN_SHIELD_SECRET

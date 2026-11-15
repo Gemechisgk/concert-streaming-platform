@@ -3,21 +3,40 @@
  * FESHTA FEST LIVE PLATFORM — CLOUDFLARE WORKER EDGE CDN AUTH GATE
  * ============================================================================
  * Provider: Cloudflare Workers (V8 Isolate Runtime)
- * Capability: Native Web Crypto HMAC-SHA256, Cache-Key Normalization, Origin Shield Routing
+ * Capability: Native Web Crypto Asymmetric (ECDSA P-256 / RSA 2048) & HMAC-SHA256,
+ *             Cache-Key Normalization, Explicit Origin Shield Routing
  */
 
 export interface Env {
-  JWT_SECRET: string;
+  /**
+   * Public key (SPKI PEM) for verifying asymmetrically signed tokens.
+   * The private key is retained exclusively on the backend server.
+   */
+  STREAM_SIGNING_PUBLIC_KEY?: string;
+
+  /**
+   * Symmetric secret fallback for development / HMAC tokens.
+   */
+  JWT_SECRET?: string;
+
+  /**
+   * Explicit Origin Shield Hostname & Mutual Secret
+   */
   ORIGIN_SHIELD_HOSTNAME: string;
   ORIGIN_SHIELD_PORT?: string;
   ORIGIN_SHIELD_SECRET: string;
 }
 
 /**
- * Native Web Crypto HMAC-SHA256 Token Verifier
- * Compliant with RFC 7519 / RFC 2104 using crypto.subtle.verify (timing-safe).
+ * Native Web Crypto Asymmetric & HMAC Token Verifier
+ * Compliant with RFC 7519 / RFC 7518 using crypto.subtle.verify (timing-safe).
+ * Verifies ECDSA P-256 / RSA 2048 using public keys (private key retained on backend)
+ * or HMAC-SHA256 for symmetric secrets.
  */
-export async function verifyEdgeToken(token: string, secret: string): Promise<{ valid: boolean; payload?: any; reason?: string }> {
+export async function verifyEdgeToken(
+  token: string,
+  keyOrSecret: string
+): Promise<{ valid: boolean; payload?: any; reason?: string }> {
   try {
     if (!token || typeof token !== 'string') {
       return { valid: false, reason: 'Missing token' };
@@ -40,16 +59,6 @@ export async function verifyEdgeToken(token: string, secret: string): Promise<{ 
       return { valid: false, reason: 'Token has expired' };
     }
 
-    // 3. Cryptographic HMAC-SHA256 Verification using Web Crypto API
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
     // Convert base64url signature back to binary buffer
     const base64Sig = clientSig.replace(/-/g, '+').replace(/_/g, '/');
     const paddedSig = base64Sig.padEnd(base64Sig.length + ((4 - (base64Sig.length % 4)) % 4), '=');
@@ -59,11 +68,67 @@ export async function verifyEdgeToken(token: string, secret: string): Promise<{ 
       sigBytes[i] = binarySig.charCodeAt(i);
     }
 
-    const dataBytes = encoder.encode(encodedPayload);
-    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, dataBytes);
+    const dataBytes = new TextEncoder().encode(encodedPayload);
 
-    if (!isValid) {
-      return { valid: false, reason: 'Invalid cryptographic signature' };
+    // 3. Cryptographic Verification: Asymmetric (Public Key SPKI) or Symmetric (HMAC)
+    const isAsymmetric = keyOrSecret.includes('BEGIN PUBLIC KEY') || keyOrSecret.includes('BEGIN RSA PUBLIC KEY');
+
+    if (isAsymmetric) {
+      const pem = keyOrSecret.replace(/-----BEGIN [^-]+-----/g, '').replace(/-----END [^-]+-----/g, '').replace(/\s+/g, '');
+      const der = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
+      const isEc = pem.startsWith('MFkw') || pem.length < 300;
+
+      let cryptoKey: CryptoKey;
+      let isValid = false;
+
+      if (isEc) {
+        cryptoKey = await crypto.subtle.importKey(
+          'spki',
+          der.buffer,
+          { name: 'ECDSA', namedCurve: 'P-256' },
+          false,
+          ['verify']
+        );
+        isValid = await crypto.subtle.verify(
+          { name: 'ECDSA', hash: { name: 'SHA-256' } },
+          cryptoKey,
+          sigBytes,
+          dataBytes
+        );
+      } else {
+        cryptoKey = await crypto.subtle.importKey(
+          'spki',
+          der.buffer,
+          { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+          false,
+          ['verify']
+        );
+        isValid = await crypto.subtle.verify(
+          'RSASSA-PKCS1-v1_5',
+          cryptoKey,
+          sigBytes,
+          dataBytes
+        );
+      }
+
+      if (!isValid) {
+        return { valid: false, reason: 'Invalid asymmetric cryptographic signature' };
+      }
+    } else {
+      // Symmetric HMAC-SHA256 verification
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(keyOrSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify']
+      );
+
+      const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, dataBytes);
+      if (!isValid) {
+        return { valid: false, reason: 'Invalid cryptographic signature' };
+      }
     }
 
     return { valid: true, payload };
@@ -103,7 +168,15 @@ export default {
       );
     }
 
-    const authCheck = await verifyEdgeToken(token, env.JWT_SECRET);
+    const verificationKey = env.STREAM_SIGNING_PUBLIC_KEY || env.JWT_SECRET;
+    if (!verificationKey) {
+      return new Response(
+        JSON.stringify({ error: 'Server Misconfiguration: No verification key configured.', code: 'CONFIG_ERROR' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const authCheck = await verifyEdgeToken(token, verificationKey);
     if (!authCheck.valid) {
       return new Response(
         JSON.stringify({ error: `Unauthorized: ${authCheck.reason}`, code: 'TOKEN_INVALID' }),

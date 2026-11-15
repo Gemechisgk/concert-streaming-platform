@@ -2,7 +2,8 @@ import { StreamChannel, PlaybackSession, StreamQualityProfile } from '@concert/t
 import { AppError, createStreamToken, verifyStreamToken } from '@concert/shared';
 import { TicketService } from './ticket.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
+const STREAM_SIGNING_KEY = process.env.STREAM_SIGNING_PRIVATE_KEY || process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
+const STREAM_VERIFICATION_KEY = process.env.STREAM_SIGNING_PUBLIC_KEY || STREAM_SIGNING_KEY;
 const SRS_STREAM_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
 const SRS_BACKUP_STREAM_KEY = process.env.SRS_BACKUP_STREAM_KEY || 'dev_rehearsal_backup_stream_key';
 
@@ -127,8 +128,8 @@ export class StreamService {
       ticketToSessionToken.delete(verification.ticket.id);
     }
 
-    // Generate signed HMAC token with 15-min rolling expiry
-    const streamToken = createStreamToken(verification.ticket.id, eventId, userId, JWT_SECRET);
+    // Generate signed token with 15-min rolling expiry (asymmetric or HMAC)
+    const streamToken = createStreamToken(verification.ticket.id, eventId, userId, STREAM_SIGNING_KEY);
 
     const newSession: PlaybackSession = {
       sessionId: `sess_${Date.now()}`,
@@ -165,7 +166,7 @@ export class StreamService {
     if (!session) {
       return false;
     }
-    const tokenCheck = verifyStreamToken(streamToken, JWT_SECRET);
+    const tokenCheck = verifyStreamToken(streamToken, STREAM_VERIFICATION_KEY);
     if (!tokenCheck.valid) {
       activeSessions.delete(streamToken);
       ticketToSessionToken.delete(session.ticketId);
@@ -190,7 +191,7 @@ export class StreamService {
   }
 
   static handleSrsPlay(token: string): { code: number; message: string } {
-    const verified = verifyStreamToken(token, JWT_SECRET);
+    const verified = verifyStreamToken(token, STREAM_VERIFICATION_KEY);
     if (!verified.valid) {
       return { code: 1, message: 'Invalid or expired stream playback token' };
     }
