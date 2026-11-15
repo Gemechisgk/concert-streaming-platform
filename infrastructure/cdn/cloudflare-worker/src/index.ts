@@ -3,7 +3,7 @@
  * FESHTA FEST LIVE PLATFORM — CLOUDFLARE WORKER EDGE CDN AUTH GATE
  * ============================================================================
  * Provider: Cloudflare Workers (V8 Isolate Runtime)
- * Capability: Pre-Cache Token Verification, Cache-Key Normalization, Origin Shield Routing
+ * Capability: Native Web Crypto HMAC-SHA256, Cache-Key Normalization, Origin Shield Routing
  */
 
 export interface Env {
@@ -14,8 +14,8 @@ export interface Env {
 }
 
 /**
- * Pure Web Crypto HMAC-SHA256 Token Verifier
- * Self-contained implementation compatible with Cloudflare Workers V8 isolates.
+ * Native Web Crypto HMAC-SHA256 Token Verifier
+ * Compliant with RFC 7519 / RFC 2104 using crypto.subtle.verify (timing-safe).
  */
 export async function verifyEdgeToken(token: string, secret: string): Promise<{ valid: boolean; payload?: any; reason?: string }> {
   try {
@@ -30,31 +30,44 @@ export async function verifyEdgeToken(token: string, secret: string): Promise<{ 
 
     const [encodedPayload, clientSig] = parts;
 
-    // Decode payload
+    // 1. Decode base64url payload
     const rawPayload = atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/'));
     const payload = JSON.parse(rawPayload);
 
-    // Expiry check
-    if (!payload.exp || Date.now() > payload.exp) {
-      return { valid: false, reason: 'Token expired' };
+    // 2. Validate standard Unix timestamp in SECONDS
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp !== 'number' || nowSeconds > payload.exp) {
+      return { valid: false, reason: 'Token has expired' };
     }
 
-    // Cryptographic signature computation
-    let hash = 0;
-    const str = `${encodedPayload}.${secret}`;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    const expectedSig = Math.abs(hash).toString(36);
+    // 3. Cryptographic HMAC-SHA256 Verification using Web Crypto API
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
 
-    // Constant-time string equality check to prevent timing attacks
-    if (clientSig !== expectedSig) {
-      return { valid: false, reason: 'Invalid token signature' };
+    // Convert base64url signature back to binary buffer
+    const base64Sig = clientSig.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedSig = base64Sig.padEnd(base64Sig.length + ((4 - (base64Sig.length % 4)) % 4), '=');
+    const binarySig = atob(paddedSig);
+    const sigBytes = new Uint8Array(binarySig.length);
+    for (let i = 0; i < binarySig.length; i++) {
+      sigBytes[i] = binarySig.charCodeAt(i);
+    }
+
+    const dataBytes = encoder.encode(encodedPayload);
+    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, dataBytes);
+
+    if (!isValid) {
+      return { valid: false, reason: 'Invalid cryptographic signature' };
     }
 
     return { valid: true, payload };
-  } catch (err) {
+  } catch {
     return { valid: false, reason: 'Token verification exception' };
   }
 }

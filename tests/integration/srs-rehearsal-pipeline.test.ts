@@ -7,7 +7,7 @@ import { TicketService } from '../../packages/business-logic/src/ticket.service'
 import { EventService } from '../../packages/business-logic/src/event.service';
 import { createStreamToken, verifyStreamToken } from '../../packages/shared/src/index';
 import { verifyEdgeToken } from '../../infrastructure/cdn/cloudflare-worker/src/index';
-import { verifyLambdaEdgeToken, handler as lambdaEdgeHandler } from '../../infrastructure/cdn/aws-cloudfront/lambda-edge/viewer-request';
+import { verifyLambdaEdgeToken, createViewerRequestHandler, loadEdgeConfig } from '../../infrastructure/cdn/aws-cloudfront/lambda-edge/viewer-request';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
 const PRIMARY_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
@@ -134,16 +134,8 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
     const attackerCheck = verifyStreamToken(attackerToken, JWT_SECRET);
     assert.strictEqual(attackerCheck.valid, false, 'Token signed with wrong key must be rejected');
 
-    // D. Expired token simulation
-    const expiredPayload = { t: 'tkt_123', e: 'evt_srs_rehearsal_04', u: 'user_exp', exp: Date.now() - 5000 };
-    const expiredEncoded = Buffer.from(JSON.stringify(expiredPayload)).toString('base64url');
-    let hash = 0;
-    const str = `${expiredEncoded}.${JWT_SECRET}`;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    const expiredToken = `${expiredEncoded}.${Math.abs(hash).toString(36)}`;
+    // D. Expired token simulation (using standard JWT Unix seconds)
+    const expiredToken = createStreamToken('tkt_123', 'evt_srs_rehearsal_04', 'user_exp', JWT_SECRET, -60);
     const expiredCheck = verifyStreamToken(expiredToken, JWT_SECRET);
     assert.strictEqual(expiredCheck.valid, false, 'Expired token must be rejected');
   });
@@ -251,15 +243,7 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
     assert.strictEqual(auth3.valid, false, 'Scenario 3: Missing token rejected before cache check');
 
     // Scenario 4: Expired token, cached segment -> 403 Forbidden
-    const expiredPayload = { t: 'tkt_vip3', e: 'evt_srs_rehearsal_04', u: 'usr_charlie', exp: Date.now() - 5000 };
-    const expiredEncoded = Buffer.from(JSON.stringify(expiredPayload)).toString('base64url');
-    let hash = 0;
-    const str = `${expiredEncoded}.${JWT_SECRET}`;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    const expiredToken = `${expiredEncoded}.${Math.abs(hash).toString(36)}`;
+    const expiredToken = createStreamToken('tkt_vip3', 'evt_srs_rehearsal_04', 'usr_charlie', JWT_SECRET, -60);
     const auth4 = verifyStreamToken(expiredToken, JWT_SECRET);
     assert.strictEqual(auth4.valid, false, 'Scenario 4: Expired token rejected despite cached segment');
 
@@ -308,7 +292,12 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
     const lambdaAuth = verifyLambdaEdgeToken(validToken, JWT_SECRET);
     assert.strictEqual(lambdaAuth.valid, true, 'Lambda@Edge verifyLambdaEdgeToken accepts valid token');
 
-    // Test Lambda@Edge viewer-request event handler execution
+    // Test Lambda@Edge viewer-request factory with build-injected configuration
+    const edgeHandler = createViewerRequestHandler({
+      jwtSecret: JWT_SECRET,
+      originShieldSecret: 'origin_shield_secret_123'
+    });
+
     const mockCfEvent = {
       Records: [{
         cf: {
@@ -322,7 +311,7 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
       }]
     };
 
-    const edgeResult = await lambdaEdgeHandler(mockCfEvent as any);
+    const edgeResult = await edgeHandler(mockCfEvent as any);
     assert.strictEqual('uri' in edgeResult, true, 'Authorized request is forwarded to origin');
     if ('uri' in edgeResult) {
       // Token must be stripped from querystring for segment cache sharing
@@ -344,12 +333,19 @@ describe('OBS → SRS → CDN → HLS Full Rehearsal Verification & Security Aud
         }
       }]
     };
-    const unauthResult = await lambdaEdgeHandler(mockUnauthEvent as any);
+    const unauthResult = await edgeHandler(mockUnauthEvent as any);
     assert.strictEqual('status' in unauthResult, true, 'Unauthorized request terminates with custom response');
     if ('status' in unauthResult) {
       assert.strictEqual(unauthResult.status, '403', 'Returns 403 Forbidden');
       assert.strictEqual(unauthResult.headers['cache-control'][0].value.includes('no-store'), true, 'Must have no-store cache header');
     }
+
+    // Verify Lambda@Edge fails closed when configuration is missing
+    assert.throws(
+      () => loadEdgeConfig(),
+      /Missing edge-config\.json/,
+      'Lambda@Edge fails closed if edge-config.json is missing'
+    );
   });
 
 });

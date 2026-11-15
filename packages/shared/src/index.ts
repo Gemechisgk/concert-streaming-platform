@@ -1,17 +1,17 @@
-// Currency Utilities
-export function formatCurrency(amountCents: number, currency: 'ETB' | 'USD' = 'ETB'): string {
-  const major = (amountCents / 100).toFixed(2);
-  if (currency === 'ETB') {
-    return `ETB ${Number(major).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-  }
-  return `$${Number(major).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+import crypto from 'node:crypto';
+
+export function formatCurrency(amountMinor: number, currency: string = 'ETB'): string {
+  const amount = (amountMinor / 100).toFixed(2);
+  if (currency === 'USD') return `$${amount}`;
+  return `${currency} ${amount}`;
 }
 
 export function parseToCents(amount: number): number {
   return Math.round(amount * 100);
 }
 
-// Cryptographic / Token Utilities
+export const formatMinorAmount = formatCurrency;
+
 export function generateTicketCode(eventId: string, ticketTypeId: string, sequence: number): string {
   const prefix = eventId.substring(0, 3).toUpperCase();
   const typeCode = ticketTypeId.substring(0, 3).toUpperCase();
@@ -20,46 +20,76 @@ export function generateTicketCode(eventId: string, ticketTypeId: string, sequen
   return `TKT-${prefix}-${typeCode}-${seqPadded}-${randomChars}`;
 }
 
-export function createStreamToken(ticketId: string, eventId: string, userId: string, secret: string): string {
+/**
+ * Creates a cryptographically signed HMAC-SHA256 stream playback token.
+ * Payload expiry `exp` is formatted as standard JWT NumericDate in UNIX SECONDS (RFC 7519 §4.1.4).
+ */
+export function createStreamToken(
+  ticketId: string,
+  eventId: string,
+  userId: string,
+  secret: string,
+  ttlSeconds: number = 15 * 60
+): string {
+  const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = {
     t: ticketId,
     e: eventId,
     u: userId,
-    exp: Date.now() + 15 * 60 * 1000 // 15 mins expiry window
+    iat: nowSeconds,
+    exp: nowSeconds + ttlSeconds
   };
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  // Simple HMAC-like signature simulation for token security
-  let hash = 0;
-  const str = `${encoded}.${secret}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const sig = Math.abs(hash).toString(36);
-  return `${encoded}.${sig}`;
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const hmacSig = crypto
+    .createHmac('sha256', secret)
+    .update(encodedPayload)
+    .digest('base64url');
+
+  return `${encodedPayload}.${hmacSig}`;
 }
 
-export function verifyStreamToken(token: string, secret: string): { valid: boolean; payload?: any } {
+/**
+ * Cryptographically verifies an HMAC-SHA256 stream playback token using constant-time comparison
+ * and checks expiry against standard UNIX seconds.
+ */
+export function verifyStreamToken(token: string, secret: string): { valid: boolean; payload?: any; reason?: string } {
   try {
-    const [encoded, sig] = token.split('.');
-    if (!encoded || !sig) return { valid: false };
-
-    let hash = 0;
-    const str = `${encoded}.${secret}`;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
+    if (!token || typeof token !== 'string') {
+      return { valid: false, reason: 'Missing token' };
     }
-    const expectedSig = Math.abs(hash).toString(36);
-    if (sig !== expectedSig) return { valid: false };
 
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
-    if (Date.now() > payload.exp) {
-      return { valid: false };
+    const parts = token.split('.');
+    if (parts.length !== 2) {
+      return { valid: false, reason: 'Malformed token structure' };
     }
+
+    const [encodedPayload, clientSig] = parts;
+
+    // 1. Constant-time HMAC-SHA256 verification
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(encodedPayload)
+      .digest('base64url');
+
+    const clientBuf = Buffer.from(clientSig, 'utf8');
+    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+
+    if (clientBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(clientBuf, expectedBuf)) {
+      return { valid: false, reason: 'Invalid cryptographic signature' };
+    }
+
+    // 2. Decode payload & check standard Unix seconds expiration
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf-8'));
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    if (typeof payload.exp !== 'number' || nowSeconds > payload.exp) {
+      return { valid: false, reason: 'Token has expired' };
+    }
+
     return { valid: true, payload };
   } catch {
-    return { valid: false };
+    return { valid: false, reason: 'Token verification exception' };
   }
 }
 
@@ -83,15 +113,25 @@ export function formatConcertTime(dateStr: string): string {
   });
 }
 
-// Application Error
 export class AppError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number = 400,
-    public code: string = 'BAD_REQUEST',
-    public details?: any
-  ) {
+  statusCode: number;
+  code: string;
+  details?: any;
+
+  constructor(message: string, statusCode: number = 400, code: string = 'BAD_REQUEST', details?: any) {
     super(message);
     this.name = 'AppError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
   }
+}
+
+export function sanitizeHtmlInput(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
