@@ -77,9 +77,13 @@ export default function Player({
     setIsLoading(true);
     setHasError(false);
 
-    const targetHlsUrl = (streamUrl && streamUrl.includes('.m3u8'))
+    let targetHlsUrl = (streamUrl && streamUrl.includes('.m3u8'))
       ? streamUrl
       : 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+
+    if (streamToken && targetHlsUrl.startsWith('/api') && !targetHlsUrl.includes('token=')) {
+      targetHlsUrl += `${targetHlsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(streamToken)}`;
+    }
 
     if (Hls.isSupported()) {
       const hls = new Hls({

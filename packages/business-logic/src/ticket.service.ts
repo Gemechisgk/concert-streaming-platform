@@ -182,6 +182,18 @@ let mockTickets: Ticket[] = [
     event: EventService.getEventById('evt_teddy_afro_01')!,
     ticketType: mockTicketTypes.find(t => t.id === 'tt_teddy_vip')!,
     issuedAt: new Date().toISOString()
+  },
+  {
+    id: 'tkt_srs_01',
+    orderId: 'ord_demo_srs',
+    userId: 'user_rehearsal_viewer',
+    ticketTypeId: 'tt_srs_rehearsal_pass',
+    ticketCode: 'TKT-SRS-VIP-0001-TEST8',
+    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-SRS-VIP-0001-TEST8',
+    status: 'ACTIVE',
+    event: EventService.getEventById('evt_srs_rehearsal_04')!,
+    ticketType: mockTicketTypes.find(t => t.id === 'tt_srs_rehearsal_pass')!,
+    issuedAt: new Date().toISOString()
   }
 ];
 

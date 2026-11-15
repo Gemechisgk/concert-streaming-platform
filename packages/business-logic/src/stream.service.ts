@@ -2,7 +2,9 @@ import { StreamChannel, PlaybackSession, StreamQualityProfile } from '@concert/t
 import { AppError, createStreamToken, verifyStreamToken } from '@concert/shared';
 import { TicketService } from './ticket.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_stream_secret_key_antigravity_123';
+const JWT_SECRET = process.env.JWT_SECRET || 'development_jwt_secret_test_key_min_32_chars';
+const SRS_STREAM_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
+const SRS_BACKUP_STREAM_KEY = process.env.SRS_BACKUP_STREAM_KEY || 'dev_rehearsal_backup_stream_key';
 
 // Active in-memory playback sessions to enforce single active session policy per ticket
 let activeSessions: Map<string, PlaybackSession> = new Map();
@@ -37,9 +39,9 @@ let mockChannels: Record<string, StreamChannel> = {
       { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_6/640x360/index.m3u8' },
       { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
     ],
-    primaryIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_master',
-    backupIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_backup',
-    streamKey: 'live_veronica_secret_key_prim',
+    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
+    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    streamKey: SRS_STREAM_KEY,
     fps: 59.94,
     currentBitrateKbps: 4800,
     dropFrames: 0
@@ -56,9 +58,9 @@ let mockChannels: Record<string, StreamChannel> = {
       { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_2/1280x720/index.m3u8' },
       { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
     ],
-    primaryIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_master',
-    backupIngestRtmp: 'rtmp://localhost:1935/live/veronica_live_backup',
-    streamKey: 'live_veronica_secret_key_prim',
+    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
+    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    streamKey: SRS_STREAM_KEY,
     fps: 59.94,
     currentBitrateKbps: 4800,
     dropFrames: 0
@@ -67,11 +69,11 @@ let mockChannels: Record<string, StreamChannel> = {
     id: 'ch_rophnan_02',
     eventId: 'evt_rophnan_02',
     status: 'OFFLINE',
-    hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
     qualities: [],
-    primaryIngestRtmp: 'rtmp://localhost:1935/live/rophnan_live_master',
-    backupIngestRtmp: 'rtmp://localhost:1935/live/rophnan_live_backup',
-    streamKey: 'live_rophnan_mystics_key_prim',
+    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
+    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    streamKey: SRS_STREAM_KEY,
     fps: 60,
     currentBitrateKbps: 0,
     dropFrames: 0
@@ -80,17 +82,18 @@ let mockChannels: Record<string, StreamChannel> = {
     id: 'ch_srs_rehearsal_04',
     eventId: 'evt_srs_rehearsal_04',
     status: 'LIVE',
-    hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+    // Actual SRS/FFmpeg ABR Master Playlist delivered via Token-Gated CDN proxy
+    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
     qualities: [
-      { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
-      { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_2/1280x720/index.m3u8' },
-      { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_4/854x480/index.m3u8' },
-      { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_6/640x360/index.m3u8' },
-      { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+      { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: '/api/v1/cdn/live/abr/stream_1080p.m3u8' },
+      { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: '/api/v1/cdn/live/abr/stream_720p.m3u8' },
+      { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: '/api/v1/cdn/live/abr/stream_480p.m3u8' },
+      { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: '/api/v1/cdn/live/abr/stream_360p.m3u8' },
+      { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: '/api/v1/cdn/live/abr/master.m3u8' }
     ],
-    primaryIngestRtmp: 'rtmp://localhost:1935/live/srs_rehearsal_master',
-    backupIngestRtmp: 'rtmp://localhost:1935/live/srs_rehearsal_backup',
-    streamKey: 'dev_rehearsal_primary_stream_key',
+    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
+    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    streamKey: SRS_STREAM_KEY,
     fps: 60,
     currentBitrateKbps: 4500,
     dropFrames: 0
@@ -140,7 +143,21 @@ export class StreamService {
 
     activeSessions.set(streamToken, newSession);
     ticketToSessionToken.set(verification.ticket.id, streamToken);
-    return { token: streamToken, channel };
+
+    // Format channel URLs to include the authenticated token for direct HLS access
+    const isCdnProxy = channel.hlsMasterUrl.startsWith('/api/v1/cdn/live');
+    const authenticatedChannel: StreamChannel = isCdnProxy
+      ? {
+          ...channel,
+          hlsMasterUrl: `${channel.hlsMasterUrl}?token=${encodeURIComponent(streamToken)}`,
+          qualities: channel.qualities.map(q => ({
+            ...q,
+            playlistUrl: `${q.playlistUrl}?token=${encodeURIComponent(streamToken)}`
+          }))
+        }
+      : channel;
+
+    return { token: streamToken, channel: authenticatedChannel };
   }
 
   static recordHeartbeat(streamToken: string): boolean {

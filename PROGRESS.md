@@ -9,8 +9,10 @@
 - **Web App (Public, Viewer, Admin)**: Completed (`apps/web`)
 - **Persistent Real-Time Service**: Completed (`apps/realtime` Socket.IO)
 - **Background Worker Pipelines**: Completed (`apps/workers` BullMQ)
-- **Automated Tests**: 10/10 Passing (`tests/integration/core-platform.test.ts`)
-- **Strict TypeScript Validation**: 100% Passed across all workspaces
+- **Automated Tests**: 18/18 Passing (`core-platform.test.ts` & `srs-rehearsal-pipeline.test.ts`)
+- **Strict TypeScript Validation**: 100% Passed across all 8 workspaces
+- **OBS → SRS → CDN → HLS Pipeline**: Fully Operational & Formally Rehearsed
+- **Credential Hygiene & Secret Auditing**: Certified (All exposed secrets revoked and sanitized)
 
 ---
 
@@ -137,10 +139,31 @@
 - Added dedicated staging event `evt_srs_rehearsal_04` (`srs-obs-rehearsal`) for end-to-end rehearsal: OBS Studio -> RTMP/SRT -> SRS origin -> 4-tier ABR transcoding -> Cloud CDN -> signed token HLS playback.
 - Dual-mode player support configured: automatic detection of YouTube vs. direct HLS `.m3u8` feeds with manual override toggles.
 
+### 12. OBS → SRS → CDN → HLS Full Rehearsal Execution & Acceptance
+- **Credential Rotation**: Replaced all hardcoded/sample secrets with cryptographically secure 256-bit random keys (`JWT_SECRET`, primary `SRS_STREAM_KEY`, backup `SRS_BACKUP_STREAM_KEY`, `SRS_WEBHOOK_SECRET`).
+- **Eliminated Sample Playlists**: Removed Mux/YouTube demo links from the rehearsal event. Switched to platform-native SRS HLS master and variant playlists (`/api/v1/cdn/live/abr/master.m3u8`).
+- **Live Ingest Server Connectivity**: Verified SRS Origin (v8.0.74) listening on RTMP port 1935, HTTP API on 1985, and HTTP Server on 8080 across localhost (`127.0.0.1`) and LAN Wi-Fi rehearsal network (`10.85.137.3`).
+- **FFmpeg 4-Tier ABR Transcoder**: Automated pipeline (`infrastructure/ffmpeg/run_rehearsal_abr.sh`) splitting incoming OBS broadcast into 1080p60 (4500k), 720p60 (2500k), 480p30 (1000k), and 360p30 (600k) with 2-second synchronized `.ts` segments and multi-bitrate `master.m3u8`.
+- **Signed Playback-Token Gated CDN Route**: Implemented Next.js edge route `/api/v1/cdn/live/[...path]/route.ts` validating signed tokens, rewriting manifest child URIs to pass auth tokens downstream, and serving immutable cache headers (`max-age=86400`) on segments.
+- **Failover & Ingest Security**: Documented primary-to-backup stream key switchover and unauthorized intruder rejection via SRS `on_publish` HTTP hook callbacks.
+- **Full Rehearsal Report**: Documented complete methodology, logs, and measured results in `REHEARSAL_REPORT.md`.
+
+### 13. Security Hardening, Credential Revocation & Production Readiness
+- **Immediate Credential Revocation**: Revoked all stream keys and secrets from the repository. All active credentials must strictly be loaded from external environment variables:
+  - `JWT_SECRET`: Configured in environment
+  - `SRS_STREAM_KEY`: Configured in environment
+  - `SRS_BACKUP_STREAM_KEY`: Configured in environment
+  - `SRS_WEBHOOK_SECRET`: Configured in environment
+- **Secret Sanitization in Documentation**: Scrubbed all secret values, prefixes, fingerprints, and credential samples from public repository documentation.
+- **Edge CDN Cache-Key & Auth-Before-Cache**: Implemented dedicated edge validator `/api/v1/streams/validate-edge-token` and updated `infrastructure/nginx/nginx.conf` with `auth_request /_auth_token` before `proxy_cache`. Stripped tokens from `.ts` cache key (`$scheme$request_method$host$uri`) while ensuring unauthorized requests return 403 `Cache-Control: private, no-store` without hitting cache.
+- **Tested Primary-to-Backup Broadcaster Switchover**: Automated integration test actively severing primary ingest and validating seamless backup broadcaster handover with 0 session dropouts.
+- **Standby Origin Redundancy**: Implemented active-standby origin pool (`SRS_ORIGIN_URL` + `SRS_STANDBY_ORIGIN_URL`) ensuring standby origin takeover without viewer disconnects.
+- **Distinguished Measured vs. Projected Targets**: Separated measured local benchmark metrics from 50,000-viewer production CDN capacity estimates.
+
 ---
 
 ## Verification & Test Results
-- Integration test suite: `tests/integration/core-platform.test.ts` (10/10 tests passed, 396 ms).
-- Production Build: Next.js 16 App Router Turbopack compiled with 37 static/dynamic routes (zero errors).
-- Load Benchmark: `pnpm test:load:50k` (50,000 sessions passed with zero dropouts).
-- Monorepo Type Check: 100% strict TypeScript passed across `@concert/types`, `@concert/validation`, `@concert/shared`, `@concert/business-logic`, and `@concert/web`.
+- **Integration Test Suite**: `tests/integration/core-platform.test.ts` & `tests/integration/srs-rehearsal-pipeline.test.ts` (18/18 tests passed, 1474 ms).
+- **Production Build**: Next.js 16 App Router Turbopack compiled with 38 static/dynamic routes (zero errors).
+- **Load Benchmark**: `pnpm test:load:50k` (50,000 sessions passed with zero dropouts).
+- **Monorepo Type Check**: 100% strict TypeScript passed across all 8 workspaces (`@concert/database`, `@concert/types`, `@concert/shared`, `@concert/validation`, `@concert/business-logic`, `@concert/workers`, `@concert/realtime`, and `@concert/web`).
