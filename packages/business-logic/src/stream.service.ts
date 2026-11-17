@@ -62,7 +62,6 @@ function createStandardABRProfiles(baseMasterUrl: string): StreamQualityProfile[
 
   return [
     { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: `${prefix}/stream_1080p.m3u8` },
-    { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: `${prefix}/stream_720p.m3u8` },
     { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: `${prefix}/stream_480p.m3u8` },
     { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: `${prefix}/stream_360p.m3u8` },
     { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: baseMasterUrl }
