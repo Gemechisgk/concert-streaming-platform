@@ -149,8 +149,17 @@ export default function Player({
       timeout: 4000
     });
 
-    socket.on('connect_error', () => {
-      // Gracefully handle offline or unreachable sidecar in production
+    socket.on('connect_error', (error) => {
+      // Log for debugging, but gracefully handle offline or unreachable sidecar in production
+      console.warn('[Socket.IO] Connection error:', error?.message || error);
+    });
+
+    socket.on('connect', () => {
+      console.log('[Socket.IO] Connected to realtime server');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket.IO] Disconnected:', reason);
     });
 
     socketRef.current = socket;

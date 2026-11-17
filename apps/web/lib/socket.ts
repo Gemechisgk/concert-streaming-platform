@@ -2,6 +2,10 @@
  * Resolves the Socket.IO URL for real-time director and player telemetry.
  * In production or remote deployments, prevents client-side browsers from attempting
  * connections to 'localhost:3001', using the origin host or configured remote endpoint.
+ * 
+ * NOTE: Production deployment requires realtime server at:
+ * - Configured via NEXT_PUBLIC_REALTIME_URL environment variable, OR
+ * - Deployed as separate service with reverse proxy at /socket.io path
  */
 export function getRealtimeSocketUrl(): string {
   if (typeof window === 'undefined') {
@@ -24,6 +28,7 @@ export function getRealtimeSocketUrl(): string {
     return envUrl || `${window.location.protocol}//${window.location.hostname}:3001`;
   }
 
-  // 3. In production, use same origin (e.g. reverse-proxied /socket.io on port 80/443)
-  return window.location.origin;
+  // 3. In production, use same origin with /socket.io path
+  // This requires reverse proxy or same-origin deployment
+  return `${window.location.origin}`;
 }

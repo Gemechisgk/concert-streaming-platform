@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @concert/realtime build",
+  "outputDirectory": "apps/realtime/dist",
+  "installCommand": "pnpm install --no-frozen-lockfile"
+}
