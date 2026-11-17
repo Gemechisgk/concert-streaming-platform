@@ -94,6 +94,8 @@ export default function AdminStreamingPage() {
   // --------------------------------------------------------------------------
   useEffect(() => {
     const socketUrl = getRealtimeSocketUrl();
+    if (!socketUrl) return;
+
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 3,

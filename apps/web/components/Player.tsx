@@ -142,6 +142,8 @@ export default function Player({
   // --------------------------------------------------------------------------
   useEffect(() => {
     const socketUrl = getRealtimeSocketUrl();
+    if (!socketUrl) return;
+
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 3,
