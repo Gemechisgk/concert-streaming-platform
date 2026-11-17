@@ -164,44 +164,67 @@ let mockOrders: Order[] = [
   }
 ];
 
-let mockTickets: Ticket[] = [
-  {
-    id: 'tkt_demo_01',
-    orderId: 'ord_demo_01',
-    userId: 'user_viewer_01',
-    ticketTypeId: 'tt_teddy_vip',
-    ticketCode: 'TKT-TED-VIP-0001-9X8K2',
-    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-TED-VIP-0001-9X8K2',
-    status: 'ACTIVE',
-    event: EventService.getEventById('evt_teddy_afro_01')!,
-    ticketType: mockTicketTypes.find(t => t.id === 'tt_teddy_vip')!,
-    issuedAt: new Date().toISOString()
-  },
-  {
-    id: 'tkt_veronica_01',
-    orderId: 'ord_ver_01',
-    userId: 'user_viewer_01',
-    ticketTypeId: 'tt_veronica_vip',
-    ticketCode: 'TKT-VER-VIP-0001-TEST1',
-    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-VER-VIP-0001-TEST1',
-    status: 'ACTIVE',
-    event: EventService.getEventById('evt_veronica_01')!,
-    ticketType: mockTicketTypes.find(t => t.id === 'tt_veronica_vip')!,
-    issuedAt: new Date().toISOString()
-  },
-  {
-    id: 'tkt_srs_01',
-    orderId: 'ord_srs_01',
-    userId: 'user_viewer_01',
-    ticketTypeId: 'tt_srs_rehearsal_pass',
-    ticketCode: 'TKT-SRS-VIP-0001-TEST8',
-    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-SRS-VIP-0001-TEST8',
-    status: 'ACTIVE',
-    event: EventService.getEventById('evt_srs_rehearsal_04')!,
-    ticketType: mockTicketTypes.find(t => t.id === 'tt_srs_rehearsal_pass')!,
-    issuedAt: new Date().toISOString()
+let mockTickets: Ticket[] = [];
+let mockTicketsInitialized = false;
+
+function initializeMockTickets(): void {
+  if (mockTicketsInitialized) return;
+  
+  const teddyEvent = EventService.getEventById('evt_teddy_afro_01');
+  const veronicaEvent = EventService.getEventById('evt_veronica_01');
+  const srsEvent = EventService.getEventById('evt_srs_rehearsal_04');
+  
+  const teddyTicketType = mockTicketTypes.find(t => t.id === 'tt_teddy_vip');
+  const veronicaTicketType = mockTicketTypes.find(t => t.id === 'tt_veronica_vip');
+  const srsTicketType = mockTicketTypes.find(t => t.id === 'tt_srs_rehearsal_pass');
+  
+  if (teddyEvent && teddyTicketType) {
+    mockTickets.push({
+      id: 'tkt_demo_01',
+      orderId: 'ord_demo_01',
+      userId: 'user_viewer_01',
+      ticketTypeId: 'tt_teddy_vip',
+      ticketCode: 'TKT-TED-VIP-0001-9X8K2',
+      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-TED-VIP-0001-9X8K2',
+      status: 'ACTIVE',
+      event: teddyEvent,
+      ticketType: teddyTicketType,
+      issuedAt: new Date().toISOString()
+    });
   }
-];
+  
+  if (veronicaEvent && veronicaTicketType) {
+    mockTickets.push({
+      id: 'tkt_veronica_01',
+      orderId: 'ord_ver_01',
+      userId: 'user_viewer_01',
+      ticketTypeId: 'tt_veronica_vip',
+      ticketCode: 'TKT-VER-VIP-0001-TEST1',
+      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-VER-VIP-0001-TEST1',
+      status: 'ACTIVE',
+      event: veronicaEvent,
+      ticketType: veronicaTicketType,
+      issuedAt: new Date().toISOString()
+    });
+  }
+  
+  if (srsEvent && srsTicketType) {
+    mockTickets.push({
+      id: 'tkt_srs_01',
+      orderId: 'ord_srs_01',
+      userId: 'user_viewer_01',
+      ticketTypeId: 'tt_srs_rehearsal_pass',
+      ticketCode: 'TKT-SRS-VIP-0001-TEST8',
+      qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-SRS-VIP-0001-TEST8',
+      status: 'ACTIVE',
+      event: srsEvent,
+      ticketType: srsTicketType,
+      issuedAt: new Date().toISOString()
+    });
+  }
+  
+  mockTicketsInitialized = true;
+}
 
 export class TicketService {
   static getTicketTypesForEvent(eventId: string): TicketType[] {
@@ -213,6 +236,7 @@ export class TicketService {
   }
 
   static createCheckoutOrder(input: CheckoutInput, userId: string = 'guest'): { order: Order; tickets: Ticket[] } {
+    initializeMockTickets();
     // Simplified checkout for demo purposes
     // Get the first ticket type from items array
     const firstItem = input.items[0];
@@ -238,6 +262,9 @@ export class TicketService {
     
     mockOrders.push(order);
     
+    const ticketTypeObj = this.getTicketTypeById(firstItem.ticketTypeId);
+    const eventObj = EventService.getEventById(ticketType.eventId);
+    
     const tickets: Ticket[] = Array.from({ length: firstItem.quantity }).map((_, idx) => ({
       id: `tkt_${Date.now()}_${idx}`,
       orderId: order.id,
@@ -246,8 +273,8 @@ export class TicketService {
       ticketCode: generateTicketCode(),
       qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-${Date.now()}-${idx}`,
       status: 'ACTIVE',
-      event: EventService.getEventById(ticketType.eventId)!,
-      ticketType: ticketType,
+      event: eventObj!,
+      ticketType: ticketTypeObj!,
       issuedAt: new Date().toISOString()
     }));
     
@@ -257,14 +284,17 @@ export class TicketService {
   }
 
   static getUserTickets(userId: string): Ticket[] {
+    initializeMockTickets();
     return mockTickets.filter(t => t.userId === userId);
   }
 
   static getTicketByCode(ticketCode: string): Ticket | null {
+    initializeMockTickets();
     return mockTickets.find(t => t.ticketCode === ticketCode) ?? null;
   }
 
   static verifyTicketForEvent(ticketCode: string, eventId: string): { valid: boolean; ticket?: Ticket; reason?: string } {
+    initializeMockTickets();
     const ticket = this.getTicketByCode(ticketCode);
     if (!ticket) {
       return { valid: false, reason: 'Ticket not found' };
@@ -286,6 +316,7 @@ export class TicketService {
   }
 
   static async getPersistentUserTickets(userId: string, userEmail?: string): Promise<Ticket[]> {
+    initializeMockTickets();
     // For demo, return mock tickets
     return mockTickets.filter(t => t.userId === userId);
   }
