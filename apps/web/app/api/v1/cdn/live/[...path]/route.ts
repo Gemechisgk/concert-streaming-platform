@@ -12,6 +12,8 @@ const ORIGIN_POOL = [PRIMARY_ORIGIN, STANDBY_ORIGIN];
 
 // HLS storage directory: SRS output directory on disk
 const HLS_BASE_DIRS = [
+  path.resolve(process.cwd(), 'infrastructure/srs/windows/SRS-Windows-x86_64-8.0-d3/objs/nginx/html/live'),
+  path.resolve(process.cwd(), 'infrastructure/srs/objs/nginx/html/live'),
   path.resolve(process.cwd(), '../../infrastructure/srs/windows/SRS-Windows-x86_64-8.0-d3/objs/nginx/html/live'),
   path.resolve(process.cwd(), '../../infrastructure/srs/objs/nginx/html/live')
 ];
@@ -22,6 +24,18 @@ function resolveHlsFile(relativePath: string): string | null {
       const fullPath = path.join(/*turbopackIgnore: true*/ baseDir, relativePath);
       if (fs.existsSync(/*turbopackIgnore: true*/ fullPath)) {
         return fullPath;
+      }
+
+      // Fallback for camera-scoped subpaths:
+      // e.g. "abr/live_evt_veronica_01_1/master.m3u8" -> "abr/master.m3u8"
+      // e.g. "abr/live_evt_veronica_01_1/stream_1080p0.ts" -> "abr/stream_1080p0.ts"
+      if (relativePath.includes('abr/')) {
+        const parts = relativePath.split('/');
+        const fileName = parts[parts.length - 1];
+        const abrFallback = path.join(/*turbopackIgnore: true*/ baseDir, 'abr', fileName);
+        if (fs.existsSync(/*turbopackIgnore: true*/ abrFallback)) {
+          return abrFallback;
+        }
       }
     } catch {
       // Ignore resolution error

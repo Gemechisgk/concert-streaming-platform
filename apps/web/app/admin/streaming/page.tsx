@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { CameraFeed, CameraOperatingMode, IngestProtocol } from '@concert/types';
 import { io, Socket } from 'socket.io-client';
+import { getRealtimeSocketUrl } from '@/lib/socket';
 
 const EVENTS_LIST = [
   { id: 'evt_veronica_01', name: 'Veronica Adane — Live in Addis' },
@@ -92,10 +93,16 @@ export default function AdminStreamingPage() {
   // Socket.IO Real-Time Updates
   // --------------------------------------------------------------------------
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_REALTIME_URL || 'http://localhost:3001';
+    const socketUrl = getRealtimeSocketUrl();
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5
+      reconnectionAttempts: 3,
+      reconnectionDelay: 5000,
+      timeout: 4000
+    });
+
+    socket.on('connect_error', () => {
+      // Gracefully handle offline or unreachable sidecar in production
     });
 
     socketRef.current = socket;

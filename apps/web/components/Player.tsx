@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { PublicCameraFeed, CameraOperatingMode } from '@concert/types';
 import { io, Socket } from 'socket.io-client';
+import { getRealtimeSocketUrl } from '@/lib/socket';
 
 interface PlayerProps {
   streamUrl: string;
@@ -140,11 +141,16 @@ export default function Player({
   // Real-Time Socket.IO Listener for Director Switches & Operating Mode
   // --------------------------------------------------------------------------
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_REALTIME_URL || 'http://localhost:3001';
+    const socketUrl = getRealtimeSocketUrl();
     const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      timeout: 5000
+      reconnectionAttempts: 3,
+      reconnectionDelay: 5000,
+      timeout: 4000
+    });
+
+    socket.on('connect_error', () => {
+      // Gracefully handle offline or unreachable sidecar in production
     });
 
     socketRef.current = socket;
