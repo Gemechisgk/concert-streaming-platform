@@ -161,8 +161,9 @@ let persistentChannels: Record<string, StreamChannel> = {
     cameraMode: 'VIEWER_SELECTABLE',
     activeCameraId: 'cam_evt_veronica_01_1',
     cameras: createDefaultCameras('evt_veronica_01', 'ch_veronica_01', false),
-    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-    qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
+    // Use demo HLS stream URL for development - requires SRS deployment in production
+    hlsMasterUrl: 'https://test-streams.mux.dev/x3iyp7w/low.m3u8',
+    qualities: createStandardABRProfiles('https://test-streams.mux.dev/x3iyp7w/low.m3u8'),
     primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
     backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
@@ -177,8 +178,9 @@ let persistentChannels: Record<string, StreamChannel> = {
     cameraMode: 'DIRECTOR_CONTROLLED',
     activeCameraId: 'cam_evt_teddy_afro_01_1',
     cameras: createDefaultCameras('evt_teddy_afro_01', 'ch_teddy_01', false),
-    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-    qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
+    // Use demo HLS stream URL for development - requires SRS deployment in production
+    hlsMasterUrl: 'https://test-streams.mux.dev/x3iyp7w/low.m3u8',
+    qualities: createStandardABRProfiles('https://test-streams.mux.dev/x3iyp7w/low.m3u8'),
     primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
     backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
@@ -207,7 +209,7 @@ let persistentChannels: Record<string, StreamChannel> = {
         fps: 0
       };
     }),
-    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
+    hlsMasterUrl: 'https://test-streams.mux.dev/x3iyp7w/low.m3u8',
     qualities: [],
     primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
     backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
@@ -223,8 +225,9 @@ let persistentChannels: Record<string, StreamChannel> = {
     cameraMode: 'VIEWER_SELECTABLE',
     activeCameraId: 'cam_evt_srs_rehearsal_04_1',
     cameras: createDefaultCameras('evt_srs_rehearsal_04', 'ch_srs_rehearsal_04', true),
-    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-    qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
+    // Use demo HLS stream URL for development - requires SRS deployment in production
+    hlsMasterUrl: 'https://test-streams.mux.dev/x3iyp7w/low.m3u8',
+    qualities: createStandardABRProfiles('https://test-streams.mux.dev/x3iyp7w/low.m3u8'),
     primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
     backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
