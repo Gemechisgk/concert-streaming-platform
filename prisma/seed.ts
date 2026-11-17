@@ -236,6 +236,206 @@ async function main() {
     console.log(`Event seeded: ${event.title}`);
   }
 
+  // --------------------------------------------------------------------------
+  // Seed Default Administrative and Viewer Accounts
+  // --------------------------------------------------------------------------
+  const superAdminRole = await prisma.role.findUnique({ where: { name: RoleType.SUPER_ADMIN } });
+  const eventAdminRole = await prisma.role.findUnique({ where: { name: RoleType.EVENT_ADMIN } });
+  const viewerRole = await prisma.role.findUnique({ where: { name: RoleType.VIEWER } });
+
+  // Standard demo password hash: Admin@1234 / Viewer@1234
+  const demoPasswordHash = '$2a$10$wN31c0hJcskE86m.7v2/n.xL2nJz5h1gYj1wK9sW9y4qXf5kS2o1y';
+
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@feshtafest.com' },
+    update: { name: 'Feshta Fest Administrator', isActive: true },
+    create: {
+      id: 'usr_admin_01',
+      email: 'admin@feshtafest.com',
+      name: 'Feshta Fest Administrator',
+      passwordHash: demoPasswordHash,
+      isActive: true
+    }
+  });
+
+  if (superAdminRole && eventAdminRole) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
+      update: {},
+      create: { userId: adminUser.id, roleId: superAdminRole.id }
+    });
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: adminUser.id, roleId: eventAdminRole.id } },
+      update: {},
+      create: { userId: adminUser.id, roleId: eventAdminRole.id }
+    });
+  }
+  console.log(`Admin user verified: ${adminUser.email}`);
+
+  const viewerUser = await prisma.user.upsert({
+    where: { email: 'viewer@feshtafest.com' },
+    update: { name: 'Abebe Bikila', isActive: true },
+    create: {
+      id: 'usr_viewer_01',
+      email: 'viewer@feshtafest.com',
+      name: 'Abebe Bikila',
+      phoneNumber: '+251911234567',
+      passwordHash: demoPasswordHash,
+      isActive: true
+    }
+  });
+
+  if (viewerRole) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: viewerUser.id, roleId: viewerRole.id } },
+      update: {},
+      create: { userId: viewerUser.id, roleId: viewerRole.id }
+    });
+  }
+
+  // Create or update viewer wallet
+  await prisma.walletAccount.upsert({
+    where: { userId: viewerUser.id },
+    update: { balanceCoins: 5000 },
+    create: { userId: viewerUser.id, balanceCoins: 5000 }
+  });
+  console.log(`Viewer user & wallet verified: ${viewerUser.email}`);
+
+  // --------------------------------------------------------------------------
+  // Seed Default Cameras and Entitlements for the Live Concert
+  // --------------------------------------------------------------------------
+  const liveEvent = await prisma.event.findUnique({
+    where: { slug: 'teddy-afro-live-in-addis' },
+    include: { streamChannel: true, ticketTypes: true }
+  });
+
+  if (liveEvent && liveEvent.streamChannel) {
+    const channelId = liveEvent.streamChannel.id;
+    const defaultCameras = [
+      {
+        streamChannelId: channelId,
+        name: 'Main Stage',
+        description: 'Wide master stage camera capturing the full band performance',
+        cameraIndex: 0,
+        streamKey: 'live_teddy_afro_cam1_master',
+        backupStreamKey: 'live_teddy_afro_cam1_master_back',
+        ingestProtocol: 'RTMP' as const,
+        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/live_teddy_afro_cam1_master',
+        hlsMasterUrl: '/api/v1/cdn/live/abr/live_teddy_afro_cam1_master/master.m3u8',
+        isDefault: true,
+        isActiveLive: true,
+        status: 'LIVE' as const,
+        fps: 60,
+        bitrateKbps: 4500
+      },
+      {
+        streamChannelId: channelId,
+        name: 'Front Close-up',
+        description: 'Tight framing on lead vocalist and center soloists',
+        cameraIndex: 1,
+        streamKey: 'live_teddy_afro_cam2_closeup',
+        backupStreamKey: 'live_teddy_afro_cam2_closeup_back',
+        ingestProtocol: 'RTMP' as const,
+        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/live_teddy_afro_cam2_closeup',
+        hlsMasterUrl: '/api/v1/cdn/live/abr/live_teddy_afro_cam2_closeup/master.m3u8',
+        isDefault: false,
+        isActiveLive: false,
+        status: 'LIVE' as const,
+        fps: 60,
+        bitrateKbps: 4500
+      },
+      {
+        streamChannelId: channelId,
+        name: 'Side Stage',
+        description: 'Profile angle showing keyboardists, percussion, and guitarists',
+        cameraIndex: 2,
+        streamKey: 'live_teddy_afro_cam3_sidestage',
+        backupStreamKey: 'live_teddy_afro_cam3_sidestage_back',
+        ingestProtocol: 'SRT' as const,
+        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/live_teddy_afro_cam3_sidestage',
+        srtIngestUrl: 'srt://origin.feshtafest.com:10080?streamid=live_teddy_afro_cam3_sidestage',
+        hlsMasterUrl: '/api/v1/cdn/live/abr/live_teddy_afro_cam3_sidestage/master.m3u8',
+        isDefault: false,
+        isActiveLive: false,
+        status: 'LIVE' as const,
+        fps: 60,
+        bitrateKbps: 4500
+      },
+      {
+        streamChannelId: channelId,
+        name: 'Audience',
+        description: 'Atmospheric wide angle of crowd energy and venue lights',
+        cameraIndex: 3,
+        streamKey: 'live_teddy_afro_cam4_audience',
+        backupStreamKey: 'live_teddy_afro_cam4_audience_back',
+        ingestProtocol: 'RTMP' as const,
+        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/live_teddy_afro_cam4_audience',
+        hlsMasterUrl: '/api/v1/cdn/live/abr/live_teddy_afro_cam4_audience/master.m3u8',
+        isDefault: false,
+        isActiveLive: false,
+        status: 'LIVE' as const,
+        fps: 60,
+        bitrateKbps: 4500
+      }
+    ];
+
+    for (const cam of defaultCameras) {
+      await prisma.cameraFeed.upsert({
+        where: { streamKey: cam.streamKey },
+        update: {
+          name: cam.name,
+          description: cam.description,
+          hlsMasterUrl: cam.hlsMasterUrl,
+          isDefault: cam.isDefault,
+          isActiveLive: cam.isActiveLive,
+          status: cam.status
+        },
+        create: cam
+      });
+    }
+    console.log(`Multi-camera feeds seeded for channel: ${channelId}`);
+
+    // Seed viewer tickets
+    const vipTicketType = liveEvent.ticketTypes.find(t => t.tier === 'VIP') || liveEvent.ticketTypes[0];
+    if (vipTicketType) {
+      const order = await prisma.order.upsert({
+        where: { orderNumber: 'ORD-TED-2026-0001' },
+        update: {},
+        create: {
+          id: 'ord_demo_viewer_01',
+          userId: viewerUser.id,
+          orderNumber: 'ORD-TED-2026-0001',
+          totalAmountCents: vipTicketType.priceInCents,
+          currency: 'ETB',
+          status: 'COMPLETED',
+          idempotencyKey: 'idemp_demo_viewer_order_01',
+          items: {
+            create: {
+              ticketTypeId: vipTicketType.id,
+              quantity: 1,
+              unitPriceCents: vipTicketType.priceInCents
+            }
+          }
+        }
+      });
+
+      await prisma.ticket.upsert({
+        where: { ticketCode: 'TKT-TED-VIP-0001-9X8K2' },
+        update: { status: 'ACTIVE' },
+        create: {
+          id: 'tkt_demo_viewer_vip_01',
+          orderId: order.id,
+          userId: viewerUser.id,
+          ticketTypeId: vipTicketType.id,
+          ticketCode: 'TKT-TED-VIP-0001-9X8K2',
+          qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=TKT-TED-VIP-0001-9X8K2',
+          status: 'ACTIVE'
+        }
+      });
+      console.log('Viewer VIP Ticket verified in Supabase: TKT-TED-VIP-0001-9X8K2');
+    }
+  }
+
   console.log('Database seed completed successfully.');
 }
 
