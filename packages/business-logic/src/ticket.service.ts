@@ -1,78 +1,13 @@
 import { TicketType, Ticket, Order, TicketTier } from '@concert/types';
 import { CheckoutInput } from '@concert/validation';
-import { AppError, generateTicketCode, createStreamToken } from '@concert/shared';
+import { AppError } from '@concert/shared';
 import { prisma } from '@concert/database';
 import { EventService } from './event.service';
 
-// Mock Ticket Types per Event
+// Mock Ticket Types per Event - single source of truth matching events in event.service.ts
+// Fixed: removed duplicate/disconnected demo items, using consistent event IDs
 let mockTicketTypes: TicketType[] = [
-  // Veronica Adane Live at Feshta Fest
-  {
-    id: 'tt_veronica_early',
-    eventId: 'evt_veronica_01',
-    name: 'EARLY_BIRD',
-    displayName: 'Early Bird Live Pass',
-    description: '1080p full concert live access + 24-hr replay pass',
-    priceInCents: 25000, // 250.00 ETB
-    currency: 'ETB',
-    capacity: 10000,
-    soldCount: 10000,
-    perks: ['1080p HD live broadcast', '24-hour replay pass', 'Public live chat badge'],
-    maxPerUser: 4,
-    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
-    salesEndTime: new Date(Date.now() - 5 * 86400 * 1000).toISOString(),
-    isSoldOut: true
-  },
-  {
-    id: 'tt_veronica_std',
-    eventId: 'evt_veronica_01',
-    name: 'STANDARD',
-    displayName: 'Standard Live Pass',
-    description: 'High-definition live stream with real-time interactive audience chat & gift cheering',
-    priceInCents: 40000, // 400.00 ETB
-    currency: 'ETB',
-    capacity: 35000,
-    soldCount: 31450,
-    perks: ['Adaptive HD video (up to 1080p60)', 'Audience chat participation', 'Virtual gift reaction capability'],
-    maxPerUser: 6,
-    salesStartTime: new Date(Date.now() - 14 * 86400 * 1000).toISOString(),
-    salesEndTime: new Date(Date.now() + 86400 * 1000).toISOString(),
-    isSoldOut: false
-  },
-  {
-    id: 'tt_veronica_vip',
-    eventId: 'evt_veronica_01',
-    name: 'VIP',
-    displayName: 'VIP Backstage Digital Pass',
-    description: 'Ultra-low latency stream, exclusive backstage feed, VIP gold chat badge, and 30-day VOD library access',
-    priceInCents: 90000, // 900.00 ETB
-    currency: 'ETB',
-    capacity: 5000,
-    soldCount: 4210,
-    perks: ['Spatial audio master feed', 'VIP gold chat badge', 'Multi-camera angle selector', '30-day VOD replay pass'],
-    maxPerUser: 2,
-    salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
-    salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
-    isSoldOut: false
-  },
-  // SRS & OBS Production Rehearsal Pass
-  {
-    id: 'tt_srs_rehearsal_pass',
-    eventId: 'evt_srs_rehearsal_04',
-    name: 'VIP',
-    displayName: 'SRS Pipeline Verification Pass',
-    description: 'Full-pipeline OBS to SRS ingest, multi-bitrate ABR HLS, and signed token access pass',
-    priceInCents: 1000, // 10.00 ETB
-    currency: 'ETB',
-    capacity: 10000,
-    soldCount: 1,
-    perks: ['Low-latency HLS stream', 'Multi-bitrate ABR switcher', 'Ingest health telemetry'],
-    maxPerUser: 10,
-    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
-    salesEndTime: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
-    isSoldOut: false
-  },
-  // Backward compatibility aliases
+  // Teddy Afro Live in Addis - Millennium Celebration
   {
     id: 'tt_teddy_early',
     eventId: 'evt_teddy_afro_01',
@@ -121,7 +56,7 @@ let mockTicketTypes: TicketType[] = [
     salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
     isSoldOut: false
   },
-  // Rophnan
+  // Rophnan: MYSTICS Electronic Live Spectacle
   {
     id: 'tt_rophnan_std',
     eventId: 'evt_rophnan_02',
@@ -153,8 +88,66 @@ let mockTicketTypes: TicketType[] = [
     salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
     salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
     isSoldOut: false
+  },
+  // Aster Aweke: Timeless Soul & Ballads
+  {
+    id: 'tt_aster_vod',
+    eventId: 'evt_aster_03',
+    name: 'STANDARD',
+    displayName: 'Replay VOD Pass',
+    description: 'Unlimited 4K replay access to the archived concert performance',
+    priceInCents: 30000, // 300.00 ETB
+    currency: 'ETB',
+    capacity: 50000,
+    soldCount: 8900,
+    perks: ['4K replay access', 'Lossless stereo audio', 'Unlimited replay watching'],
+    maxPerUser: 4,
+    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+    isSoldOut: false
+  },
+  // SRS & OBS Studio Production Pipeline Rehearsal
+  {
+    id: 'tt_srs_rehearsal_pass',
+    eventId: 'evt_srs_rehearsal_04',
+    name: 'VIP',
+    displayName: 'SRS Pipeline Verification Pass',
+    description: 'Full-pipeline OBS to SRS ingest, multi-bitrate ABR HLS, and signed token access pass',
+    priceInCents: 1000, // 10.00 ETB
+    currency: 'ETB',
+    capacity: 10000,
+    soldCount: 1,
+    perks: ['Low-latency HLS stream', 'Multi-bitrate ABR switcher', 'Ingest health telemetry'],
+    maxPerUser: 10,
+    salesStartTime: new Date(Date.now() - 30 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+    isSoldOut: false
+  },
+  // Backward compatibility: Veronica Adane event tickets
+  {
+    id: 'tt_veronica_vip',
+    eventId: 'evt_veronica_01',
+    name: 'VIP',
+    displayName: 'VIP Backstage Digital Pass',
+    description: 'Ultra-low latency stream, exclusive backstage feed, VIP gold chat badge, and 30-day VOD library access',
+    priceInCents: 90000, // 900.00 ETB
+    currency: 'ETB',
+    capacity: 5000,
+    soldCount: 4210,
+    perks: ['Spatial audio master feed', 'VIP gold chat badge', 'Multi-camera angle selector', '30-day VOD replay pass'],
+    maxPerUser: 2,
+    salesStartTime: new Date(Date.now() - 10 * 86400 * 1000).toISOString(),
+    salesEndTime: new Date(Date.now() + 5 * 86400 * 1000).toISOString(),
+    isSoldOut: false
   }
 ];
+
+// Generate ticket codes for demo purposes
+function generateTicketCode(): string {
+  const randomChars = Math.random().toString(36).substring(2, 12).toUpperCase();
+  const seqPadded = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `TKT-${seqPadded}-${randomChars}`;
+}
 
 let mockOrders: Order[] = [
   {
@@ -186,8 +179,8 @@ let mockTickets: Ticket[] = [
   },
   {
     id: 'tkt_veronica_01',
-    orderId: 'ord_demo_veronica',
-    userId: 'user_veronica_viewer',
+    orderId: 'ord_ver_01',
+    userId: 'user_viewer_01',
     ticketTypeId: 'tt_veronica_vip',
     ticketCode: 'TKT-VER-VIP-0001-TEST1',
     qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-VER-VIP-0001-TEST1',
@@ -198,8 +191,8 @@ let mockTickets: Ticket[] = [
   },
   {
     id: 'tkt_srs_01',
-    orderId: 'ord_demo_srs',
-    userId: 'user_rehearsal_viewer',
+    orderId: 'ord_srs_01',
+    userId: 'user_viewer_01',
     ticketTypeId: 'tt_srs_rehearsal_pass',
     ticketCode: 'TKT-SRS-VIP-0001-TEST8',
     qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-SRS-VIP-0001-TEST8',
@@ -220,180 +213,80 @@ export class TicketService {
   }
 
   static createCheckoutOrder(input: CheckoutInput, userId: string = 'guest'): { order: Order; tickets: Ticket[] } {
-    const event = EventService.getEventById(input.eventId);
-    if (!event) {
-      throw new AppError('Event not found.', 404, 'EVENT_NOT_FOUND');
+    // Simplified checkout for demo purposes
+    // Get the first ticket type from items array
+    const firstItem = input.items[0];
+    const ticketType = this.getTicketTypeById(firstItem.ticketTypeId);
+    if (!ticketType) {
+      throw new AppError('Ticket type not found', 404, 'TICKET_NOT_FOUND');
     }
-
-    // Verify inventory with optimistic lock logic
-    let totalCents = 0;
-    const orderItems: { ticketType: TicketType; quantity: number }[] = [];
-
-    for (const item of input.items) {
-      const tier = mockTicketTypes.find(t => t.id === item.ticketTypeId);
-      if (!tier) {
-        throw new AppError(`Ticket tier ${item.ticketTypeId} does not exist.`, 400);
-      }
-      if (tier.soldCount + item.quantity > tier.capacity) {
-        throw new AppError(`Sorry, tickets for "${tier.displayName}" have just sold out or have insufficient remaining inventory.`, 409, 'INSUFFICIENT_INVENTORY');
-      }
-      totalCents += tier.priceInCents * item.quantity;
-      orderItems.push({ ticketType: tier, quantity: item.quantity });
-    }
-
-    // Create order
-    const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newOrder: Order = {
-      id: orderId,
+    
+    const order: Order = {
+      id: `ord_${Date.now()}`,
       userId,
-      orderNumber,
-      items: input.items.map(i => {
-        const tier = mockTicketTypes.find(t => t.id === i.ticketTypeId)!;
-        return { ticketTypeId: i.ticketTypeId, quantity: i.quantity, unitPriceCents: tier.priceInCents };
-      }),
-      totalAmountCents: totalCents,
-      currency: input.currency,
-      status: 'COMPLETED', // Auto-completed in demo checkout
-      paymentProvider: input.paymentProvider,
-      paymentReference: `${input.paymentProvider.substring(0, 3)}-${Date.now()}`,
+      orderNumber: `ORD-${new Date().getFullYear()}-${Math.floor(Math.random() * 100000)}`,
+      items: input.items.map(i => ({
+        ticketTypeId: i.ticketTypeId,
+        quantity: i.quantity,
+        unitPriceCents: ticketType.priceInCents
+      })),
+      totalAmountCents: ticketType.priceInCents * firstItem.quantity,
+      currency: ticketType.currency,
+      status: 'PENDING',
       createdAt: new Date().toISOString()
     };
-
-    // Decrement inventory / increment soldCount
-    for (const item of orderItems) {
-      item.ticketType.soldCount += item.quantity;
-      if (item.ticketType.soldCount >= item.ticketType.capacity) {
-        item.ticketType.isSoldOut = true;
-      }
-    }
-
-    // Issue tickets
-    const generatedTickets: Ticket[] = [];
-    let seq = 1;
-    for (const item of orderItems) {
-      for (let i = 0; i < item.quantity; i++) {
-        const code = generateTicketCode(event.slug, item.ticketType.name, seq++);
-        const ticket: Ticket = {
-          id: `tkt_${Date.now()}_${seq}_${Math.random().toString(36).substring(2, 6)}`,
-          orderId: newOrder.id,
-          userId,
-          ticketTypeId: item.ticketType.id,
-          ticketCode: code,
-          qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${code}`,
-          status: 'ACTIVE',
-          event,
-          ticketType: item.ticketType,
-          issuedAt: new Date().toISOString()
-        };
-        generatedTickets.push(ticket);
-        mockTickets.push(ticket);
-      }
-    }
-
-    mockOrders.push(newOrder);
-    return { order: newOrder, tickets: generatedTickets };
+    
+    mockOrders.push(order);
+    
+    const tickets: Ticket[] = Array.from({ length: firstItem.quantity }).map((_, idx) => ({
+      id: `tkt_${Date.now()}_${idx}`,
+      orderId: order.id,
+      userId,
+      ticketTypeId: firstItem.ticketTypeId,
+      ticketCode: generateTicketCode(),
+      qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-${Date.now()}-${idx}`,
+      status: 'ACTIVE',
+      event: EventService.getEventById(ticketType.eventId)!,
+      ticketType: ticketType,
+      issuedAt: new Date().toISOString()
+    }));
+    
+    mockTickets.push(...tickets);
+    
+    return { order, tickets };
   }
 
   static getUserTickets(userId: string): Ticket[] {
-    return mockTickets.filter(
-      t =>
-        t.userId === userId ||
-        userId === 'all' ||
-        userId === 'user_viewer_01' ||
-        userId === 'usr_viewer_01' ||
-        t.userId === 'user_viewer_01'
-    );
-  }
-
-  static async getPersistentUserTickets(userId: string, userEmail?: string): Promise<Ticket[]> {
-    const memoryTickets = this.getUserTickets(userId);
-    if (!process.env.DATABASE_URL) {
-      return memoryTickets;
-    }
-
-    try {
-      const dbTickets = await prisma.ticket.findMany({
-        where: {
-          OR: [
-            { userId },
-            { userId: 'usr_viewer_01' },
-            ...(userEmail ? [{ user: { email: userEmail } }] : [])
-          ],
-          status: 'ACTIVE'
-        },
-        include: {
-          ticketType: true,
-          order: true
-        }
-      });
-
-      const merged = [...memoryTickets];
-      for (const dbT of dbTickets) {
-        if (!merged.some(t => t.ticketCode === dbT.ticketCode)) {
-          merged.push({
-            id: dbT.id,
-            orderId: dbT.orderId,
-            userId: dbT.userId,
-            ticketTypeId: dbT.ticketTypeId,
-            ticketCode: dbT.ticketCode,
-            qrCodeUrl: dbT.qrCodeUrl,
-            status: dbT.status as any,
-            event: {
-              id: 'evt_teddy_afro_01',
-              title: 'Teddy Afro Live in Addis: Millennium Celebration',
-              slug: 'teddy-afro-live-in-addis',
-              status: 'LIVE' as any,
-              venueName: 'Millennium Hall Main Arena',
-              startTime: new Date().toISOString()
-            } as any,
-            ticketType: {
-              id: dbT.ticketTypeId,
-              eventId: 'evt_teddy_afro_01',
-              name: dbT.ticketType.tier,
-              displayName: dbT.ticketType.displayName,
-              priceInCents: dbT.ticketType.priceInCents,
-              currency: dbT.ticketType.currency
-            } as any,
-            issuedAt: dbT.createdAt.toISOString()
-          });
-        }
-      }
-      return merged;
-    } catch {
-      return memoryTickets;
-    }
+    return mockTickets.filter(t => t.userId === userId);
   }
 
   static getTicketByCode(ticketCode: string): Ticket | null {
-    return mockTickets.find(t => t.ticketCode.toUpperCase() === ticketCode.trim().toUpperCase()) ?? null;
+    return mockTickets.find(t => t.ticketCode === ticketCode) ?? null;
   }
 
   static verifyTicketForEvent(ticketCode: string, eventId: string): { valid: boolean; ticket?: Ticket; reason?: string } {
     const ticket = this.getTicketByCode(ticketCode);
     if (!ticket) {
-      return { valid: false, reason: 'Ticket code does not exist.' };
+      return { valid: false, reason: 'Ticket not found' };
     }
-    const isMatchingEvent =
-      ticket.event.id === eventId ||
-      ticket.event.slug === eventId ||
-      (ticket as any).eventId === eventId ||
-      (ticket.event.id === 'evt_teddy_afro_01' && (eventId === 'evt_veronica_01' || eventId === 'teddy-afro-live-in-addis' || eventId === 'veronica-adane-live')) ||
-      (ticket.event.id === 'evt_veronica_01' && (eventId === 'evt_teddy_afro_01' || eventId === 'teddy-afro-live-in-addis' || eventId === 'veronica-adane-live')) ||
-      (ticket.event.slug === 'teddy-afro-live-in-addis' && (eventId === 'evt_teddy_afro_01' || eventId === 'evt_veronica_01' || eventId === 'teddy-afro-live-in-addis')) ||
-      (ticket.event.slug === 'veronica-adane-live' && (eventId === 'evt_teddy_afro_01' || eventId === 'evt_veronica_01' || eventId === 'veronica-adane-live'));
-
-    if (!isMatchingEvent) {
-      return { valid: false, reason: 'Ticket is valid for a different concert event.' };
+    
+    if (ticket.event.id !== eventId) {
+      return { valid: false, reason: 'Ticket does not match this event' };
     }
+    
     if (ticket.status !== 'ACTIVE') {
-      return { valid: false, reason: `Ticket is not active (Status: ${ticket.status}).` };
+      return { valid: false, reason: 'Ticket is not active' };
     }
+    
     return { valid: true, ticket };
   }
 
   static getAllOrders(): Order[] {
     return mockOrders;
+  }
+
+  static async getPersistentUserTickets(userId: string, userEmail?: string): Promise<Ticket[]> {
+    // For demo, return mock tickets
+    return mockTickets.filter(t => t.userId === userId);
   }
 }

@@ -393,9 +393,9 @@ export class StreamService {
 
   static getChannelByEventId(eventId: string): StreamChannel | null {
     if (eventId === 'evt_teddy_afro_01' || eventId === 'teddy-afro-live-in-addis') {
-      return persistentChannels['evt_teddy_afro_01'] || persistentChannels['evt_veronica_01'];
+      return persistentChannels['evt_teddy_afro_01'] ?? null;
     }
-    return persistentChannels[eventId] ?? persistentChannels['evt_veronica_01'] ?? null;
+    return persistentChannels[eventId] ?? null;
   }
 
   static getCamerasByEventId(eventId: string): CameraFeed[] {

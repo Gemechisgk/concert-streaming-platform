@@ -46,6 +46,16 @@ export interface EventScheduleItem {
   endTime: string;
 }
 
+// Backwards compatibility: EventSchedule for DB schema vs schedule for business logic
+export interface EventSchedule {
+  id: string;
+  stageName: string;
+  title: string;
+  performerName: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface ConcertEvent {
   id: string;
   title: string;
