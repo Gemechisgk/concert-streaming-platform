@@ -109,7 +109,7 @@ export default async function PaymentConfirmationPage({
           </Link>
 
           <Link
-            href={`/watch/${ticket?.event.id}`}
+            href={`/watch/${ticket?.event.id || ticket?.event.slug || 'evt_teddy_afro_01'}${ticket?.ticketCode ? `?ticket=${ticket.ticketCode}` : ''}`}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-polo-red px-7 py-3 text-xs font-black uppercase tracking-wider text-white shadow-xl shadow-polo-red/30 hover:bg-polo-red-dark active:scale-95 transition-all"
           >
             <Play className="size-3.5 fill-white" />

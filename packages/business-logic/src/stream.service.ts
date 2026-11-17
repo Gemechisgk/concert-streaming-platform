@@ -243,11 +243,21 @@ async function syncCameraToPrisma(camera: CameraFeed): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   try {
     if (prisma?.cameraFeed) {
+      const channel = await prisma.streamChannel.findFirst({
+        where: {
+          OR: [
+            { id: camera.streamChannelId },
+            { eventId: camera.eventId }
+          ]
+        }
+      });
+      if (!channel) return;
+
       await prisma.cameraFeed.upsert({
-        where: { id: camera.id },
+        where: { streamKey: camera.streamKey },
         create: {
           id: camera.id,
-          streamChannelId: camera.streamChannelId || camera.eventId,
+          streamChannelId: channel.id,
           name: camera.name,
           description: camera.description || null,
           cameraIndex: camera.cameraIndex,
@@ -275,7 +285,7 @@ async function syncCameraToPrisma(camera: CameraFeed): Promise<void> {
       });
     }
   } catch (err: any) {
-    // Database sync error logged without breaking in-memory execution
+    // Database sync error safely trapped without breaking execution
   }
 }
 
@@ -283,11 +293,22 @@ async function syncChannelToPrisma(channel: StreamChannel): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   try {
     if (prisma?.streamChannel) {
+      const event = await prisma.event.findFirst({
+        where: {
+          OR: [
+            { id: channel.eventId },
+            { slug: channel.eventId },
+            { slug: 'teddy-afro-live-in-addis' }
+          ]
+        }
+      });
+      if (!event) return;
+
       await prisma.streamChannel.upsert({
-        where: { eventId: channel.eventId },
+        where: { eventId: event.id },
         create: {
           id: channel.id,
-          eventId: channel.eventId,
+          eventId: event.id,
           primaryIngestKey: channel.streamKey,
           backupIngestKey: channel.backupIngestRtmp || `${channel.streamKey}_back`,
           streamStatus: channel.status as any,
@@ -307,7 +328,7 @@ async function syncChannelToPrisma(channel: StreamChannel): Promise<void> {
       });
     }
   } catch (err: any) {
-    // Database sync error logged without breaking in-memory execution
+    // Database sync error safely trapped without breaking execution
   }
 }
 
