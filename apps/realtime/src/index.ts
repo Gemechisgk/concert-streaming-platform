@@ -1,9 +1,9 @@
 import http from 'http';
 import express from 'express';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import cors from 'cors';
-import { ChatService, GiftService, StreamService } from '@concert/business-logic';
-import { SystemRole } from '@concert/types';
+import { ChatService, GiftService, StreamService, AuthService } from '@concert/business-logic';
+import { SystemRole, User } from '@concert/types';
 
 const app = express();
 app.use(cors());
@@ -26,10 +26,55 @@ const PRODUCTION_OPERATOR_ROLES: SystemRole[] = [
   'EVENT_MANAGER'
 ];
 
-function isProductionOperator(role?: SystemRole): boolean {
-  if (!role) return false;
-  return PRODUCTION_OPERATOR_ROLES.includes(role);
+function isProductionOperator(roles?: SystemRole[]): boolean {
+  if (!roles || !Array.isArray(roles)) return false;
+  return roles.some(role => PRODUCTION_OPERATOR_ROLES.includes(role));
 }
+
+function isAuthorizedForEvent(user: User, eventId: string): boolean {
+  if (!user || !user.roles) return false;
+  if (user.roles.includes('SUPER_ADMIN')) return true;
+  if (user.roles.includes('EVENT_ADMIN') || user.roles.includes('EVENT_MANAGER')) {
+    // Event administrators and managers have production authority over configured events
+    return Boolean(eventId);
+  }
+  return false;
+}
+
+// ----------------------------------------------------------------------------
+// Socket.IO Server-Verified Session Authentication Middleware
+// Never accept user IDs or roles from unverified client payloads.
+// ----------------------------------------------------------------------------
+io.use(async (socket: Socket, next) => {
+  try {
+    const authHeader = socket.handshake.headers?.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+    
+    let cookieToken: string | undefined;
+    const cookieHeader = socket.handshake.headers?.cookie;
+    if (cookieHeader) {
+      const match = cookieHeader.match(/session_token=([^;]+)/);
+      if (match) cookieToken = match[1];
+    }
+
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.query?.token ||
+      bearerToken ||
+      cookieToken;
+
+    if (token && typeof token === 'string') {
+      const verifiedUser = await AuthService.verifySession(token);
+      if (verifiedUser) {
+        socket.data.user = verifiedUser;
+      }
+    }
+    next();
+  } catch (err) {
+    // Continue connection for anonymous public viewers, but socket.data.user remains undefined
+    next();
+  }
+});
 
 // ----------------------------------------------------------------------------
 // Wire StreamService Realtime Event Bus -> Socket.IO Room Broadcasts
@@ -47,13 +92,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', uptime: process.uptime(), connections: io.engine.clientsCount });
 });
 
-io.on('connection', (socket) => {
-  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+io.on('connection', (socket: Socket) => {
+  const sessionUser: User | undefined = socket.data.user;
+  console.log(`[Socket.IO] Client connected: ${socket.id} (Authenticated: ${sessionUser?.email || 'Anonymous'})`);
 
   // Join concert event room
-  socket.on('join_event', ({ eventId, user }) => {
+  socket.on('join_event', ({ eventId }) => {
     socket.join(`event:${eventId}`);
-    console.log(`User ${user?.name || 'Anonymous'} joined room: event:${eventId}`);
+    const displayName = sessionUser?.name || 'Anonymous Viewer';
+    console.log(`User ${displayName} joined room: event:${eventId}`);
 
     // Send back initial chat history
     const history = ChatService.getMessages(eventId);
@@ -81,18 +128,30 @@ io.on('connection', (socket) => {
   });
 
   // --------------------------------------------------------------------------
-  // Multi-Camera Director Controls (Mode A)
+  // Multi-Camera Director Controls (Mode A) - STRICT SERVER IDENTITY ENFORCED
   // --------------------------------------------------------------------------
   socket.on('director_switch_camera', (payload, callback) => {
     try {
-      const { eventId, cameraId, user } = payload;
+      const { eventId, cameraId } = payload;
+      const authenticatedUser: User | undefined = socket.data.user;
 
-      // Security check: restrict director switching to authorized production staff
-      if (user?.role && !isProductionOperator(user.role)) {
+      if (!authenticatedUser) {
+        throw new Error('Unauthorized: Authentication session required for production controls.');
+      }
+
+      if (!isProductionOperator(authenticatedUser.roles)) {
         throw new Error('Forbidden: Only authorized directors and administrators can switch live camera feeds.');
       }
 
-      const activeCamera = StreamService.switchDirectorCamera(eventId, cameraId, user?.id || 'director');
+      if (!isAuthorizedForEvent(authenticatedUser, eventId)) {
+        throw new Error(`Forbidden: User is not authorized to control event ${eventId}.`);
+      }
+
+      const activeCamera = StreamService.switchDirectorCamera(
+        eventId,
+        cameraId,
+        authenticatedUser.id
+      );
 
       // Immediate real-time broadcast to all viewers in this event room
       io.to(`event:${eventId}`).emit('camera_switched', {
@@ -101,7 +160,8 @@ io.on('connection', (socket) => {
         activeCameraName: activeCamera.name,
         cameraIndex: activeCamera.cameraIndex,
         hlsMasterUrl: activeCamera.hlsMasterUrl,
-        operatorUserId: user?.id || 'director',
+        operatorUserId: authenticatedUser.id,
+        operatorName: authenticatedUser.name,
         timestamp: new Date().toISOString()
       });
 
@@ -115,17 +175,27 @@ io.on('connection', (socket) => {
   // Toggle Operating Mode: Director-Controlled vs Viewer-Selectable
   socket.on('update_camera_mode', (payload, callback) => {
     try {
-      const { eventId, cameraMode, user } = payload;
+      const { eventId, cameraMode } = payload;
+      const authenticatedUser: User | undefined = socket.data.user;
 
-      if (user?.role && !isProductionOperator(user.role)) {
+      if (!authenticatedUser) {
+        throw new Error('Unauthorized: Authentication session required for operating mode updates.');
+      }
+
+      if (!isProductionOperator(authenticatedUser.roles)) {
         throw new Error('Forbidden: Only administrators can update stream operating mode.');
+      }
+
+      if (!isAuthorizedForEvent(authenticatedUser, eventId)) {
+        throw new Error(`Forbidden: User is not authorized to control event ${eventId}.`);
       }
 
       const updatedMode = StreamService.setCameraMode(eventId, cameraMode);
 
       io.to(`event:${eventId}`).emit('camera_mode_changed', {
         eventId,
-        cameraMode: updatedMode
+        cameraMode: updatedMode,
+        operatorUserId: authenticatedUser.id
       });
 
       if (callback) callback({ success: true, cameraMode: updatedMode });
@@ -152,15 +222,17 @@ io.on('connection', (socket) => {
     socket.emit('camera_state_update', state);
   });
 
-  // Incoming chat message
+  // Incoming chat message - derived from authenticated identity
   socket.on('send_message', (payload, callback) => {
     try {
-      const { eventId, userId, userName, userRole, text } = payload;
+      const { eventId, text } = payload;
+      const sender = socket.data.user;
+
       const message = ChatService.postMessage({
         eventId,
-        userId: userId || socket.id,
-        userName: userName || 'Viewer',
-        userRole,
+        userId: sender ? sender.id : `guest_${socket.id.substring(0, 6)}`,
+        userName: sender ? sender.name : (payload.userName || 'Viewer'),
+        userRole: sender?.roles?.[0] || 'VIEWER',
         text
       });
 
@@ -173,14 +245,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Incoming virtual gift sent
+  // Incoming virtual gift sent - derived from authenticated identity
   socket.on('send_gift', (payload, callback) => {
     try {
-      const { eventId, userId, userName, giftId, count } = payload;
+      const { eventId, giftId, count } = payload;
+      const sender = socket.data.user;
+
       const result = GiftService.sendGift({
         eventId,
-        userId: userId || 'guest',
-        userName: userName || 'Generous Fan',
+        userId: sender ? sender.id : (payload.userId || 'guest'),
+        userName: sender ? sender.name : (payload.userName || 'Generous Fan'),
         giftId,
         count: count || 1
       });
@@ -194,8 +268,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Moderator actions
+  // Moderator actions - strictly checked against authenticated session
   socket.on('moderate_message', ({ eventId, action, messageId, targetUserId }) => {
+    const authenticatedUser: User | undefined = socket.data.user;
+    const isModerator = authenticatedUser?.roles?.some(r =>
+      ['SUPER_ADMIN', 'EVENT_ADMIN', 'CHAT_MODERATOR'].includes(r)
+    );
+
+    if (!isModerator) {
+      socket.emit('error_notification', { message: 'Forbidden: Moderator permissions required.' });
+      return;
+    }
+
     if (action === 'DELETE' && messageId) {
       ChatService.deleteMessage(eventId, messageId);
       io.to(`event:${eventId}`).emit('message_deleted', { messageId });

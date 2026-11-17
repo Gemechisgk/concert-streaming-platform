@@ -48,10 +48,10 @@ export default function Player({
   streamUrl,
   posterUrl,
   eventName,
-  eventId = 'evt_veronica_01',
+  eventId,
   isLive = true,
   streamToken: initialStreamToken,
-  ticketCode = 'TKT-TED-VIP-0001-9X8K2',
+  ticketCode,
   cameraMode: initialCameraMode = 'VIEWER_SELECTABLE',
   availableCameras: initialAvailableCameras = [],
   initialActiveCameraId,
@@ -59,7 +59,7 @@ export default function Player({
   onHeartbeat
 }: PlayerProps) {
   const detectedYouTubeId = extractYouTubeId(streamUrl);
-  const youtubeId = detectedYouTubeId || 'mSrVwIRKASI';
+  const youtubeId = detectedYouTubeId || '';
   const [sourceMode, setSourceMode] = useState<'youtube' | 'hls'>(detectedYouTubeId ? 'youtube' : 'hls');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -225,9 +225,13 @@ export default function Player({
       // Preserve playback time for aligned multi-camera switching
       const targetTime = video.currentTime > 0 ? video.currentTime : 0;
 
-      let effectiveUrl = targetUrl && targetUrl.includes('.m3u8')
-        ? targetUrl
-        : 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+      let effectiveUrl = targetUrl || streamUrl;
+      if (!effectiveUrl) {
+        setIsLoading(false);
+        setHasError(true);
+        setErrorMessage('Camera stream offline or awaiting broadcast.');
+        return;
+      }
 
       // Attach token and camera scope
       if (token && effectiveUrl.startsWith('/api') && !effectiveUrl.includes('token=')) {
@@ -358,6 +362,12 @@ export default function Player({
       return;
     }
 
+    if (!ticketCode) {
+      setFallbackNotice('Valid ticket pass required to switch camera feeds.');
+      setTimeout(() => setFallbackNotice(null), 4000);
+      return;
+    }
+
     setIsSwitchingCamera(true);
     setSwitchingCameraName(targetCamera.name);
     setFallbackNotice(null);
@@ -367,6 +377,7 @@ export default function Player({
       const res = await fetch('/api/v1/streams/switch-camera', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           ticketCode,
           eventId,
@@ -375,7 +386,8 @@ export default function Player({
       });
 
       if (!res.ok) {
-        throw new Error('Failed to authorize camera switch.');
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to authorize camera switch.');
       }
 
       const data = await res.json();

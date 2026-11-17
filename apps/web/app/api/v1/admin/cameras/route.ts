@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { StreamService, ObsSwitcherService } from '@concert/business-logic';
+import { StreamService, ObsSwitcherService, AuthService } from '@concert/business-logic';
 import {
   CreateCameraSchema,
   UpdateCameraSchema,
@@ -7,12 +7,37 @@ import {
   UpdateCameraModeSchema
 } from '@concert/validation';
 
+async function requireProductionOperator(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+  const cookieToken = request.cookies.get('session_token')?.value;
+  const sessionToken = bearerToken || cookieToken;
+
+  if (sessionToken) {
+    const user = await AuthService.verifySession(sessionToken);
+    if (user && user.roles.some(r => ['SUPER_ADMIN', 'EVENT_ADMIN', 'EVENT_MANAGER'].includes(r))) {
+      return user;
+    }
+    throw new Error('Forbidden: Insufficient administrative privileges for camera operations.');
+  }
+
+  // If running in development/local test mode without headers, allow root admin
+  if (process.env.NODE_ENV !== 'production') {
+    const rootAdmin = AuthService.getAllUsers().find(u => u.roles.includes('SUPER_ADMIN'));
+    if (rootAdmin) return rootAdmin;
+  }
+
+  throw new Error('Unauthorized: Authentication session required.');
+}
+
 /**
  * Administrative Multi-Camera Management API
  * Restricted to administrators and authorized production operators.
  */
 export async function GET(request: NextRequest) {
   try {
+    await requireProductionOperator(request);
+
     const eventId = request.nextUrl.searchParams.get('eventId') || 'evt_veronica_01';
     const channel = StreamService.getChannelByEventId(eventId);
     const cameras = StreamService.getCamerasByEventId(eventId);
@@ -28,12 +53,15 @@ export async function GET(request: NextRequest) {
       obsStatus
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = err.message.includes('Unauthorized') ? 401 : err.message.includes('Forbidden') ? 403 : 400;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    await requireProductionOperator(request);
+
     const body = await request.json();
     const validated = CreateCameraSchema.parse(body);
 
@@ -46,12 +74,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, camera: newCamera }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = err.message.includes('Unauthorized') ? 401 : err.message.includes('Forbidden') ? 403 : 400;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
+    const operator = await requireProductionOperator(request);
     const body = await request.json();
 
     // 1. Switch live camera in Director-Controlled Mode (with OBS WebSocket command dispatch)
@@ -60,7 +90,7 @@ export async function PATCH(request: NextRequest) {
       const activeCamera = StreamService.switchDirectorCamera(
         validated.eventId,
         validated.cameraId,
-        'operator_admin'
+        operator.id
       );
 
       // Command OBS Studio over WebSocket to physically cut scene to the chosen camera
@@ -70,7 +100,8 @@ export async function PATCH(request: NextRequest) {
         success: true,
         activeCamera,
         obsScene: obsRes.sceneName,
-        obsSwitched: obsRes.success
+        obsSwitched: obsRes.success,
+        obsError: obsRes.error
       });
     }
 
@@ -96,12 +127,15 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid PATCH action or missing camera parameters' }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = err.message.includes('Unauthorized') ? 401 : err.message.includes('Forbidden') ? 403 : 400;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
+    await requireProductionOperator(request);
+
     const eventId = request.nextUrl.searchParams.get('eventId');
     const cameraId = request.nextUrl.searchParams.get('cameraId');
 
@@ -112,6 +146,7 @@ export async function DELETE(request: NextRequest) {
     StreamService.removeCamera(eventId, cameraId);
     return NextResponse.json({ success: true, message: `Camera ${cameraId} removed.` });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    const status = err.message.includes('Unauthorized') ? 401 : err.message.includes('Forbidden') ? 403 : 400;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }

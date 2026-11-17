@@ -28,6 +28,7 @@ export default function WatchEventPage() {
   const [event, setEvent] = useState<ConcertEvent | null>(null);
   const [channel, setChannel] = useState<StreamChannel | null>(null);
   const [streamToken, setStreamToken] = useState<string>('');
+  const [activeTicketCode, setActiveTicketCode] = useState<string>('');
   const [cameraMode, setCameraMode] = useState<CameraOperatingMode>('VIEWER_SELECTABLE');
   const [availableCameras, setAvailableCameras] = useState<PublicCameraFeed[]>([]);
   const [activeCamera, setActiveCamera] = useState<PublicCameraFeed | null>(null);
@@ -36,17 +37,22 @@ export default function WatchEventPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'info' | 'gifts'>('chat');
 
-  // Fetch event and obtain signed stream playback token
+  // Fetch viewer identity, ticket entitlement, and obtain signed stream playback token
   useEffect(() => {
     async function loadStream() {
       try {
         setLoading(true);
-        // Get event info
+
+        // 1. Resolve authenticated user and tickets
+        const authRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
+        const authData = await authRes.json();
+        const tickets = authData.tickets || [];
+
+        // 2. Fetch event info
         const evRes = await fetch('/api/v1/events');
         const evData = await evRes.json();
         const found = evData.events?.find(
-          (e: ConcertEvent) =>
-            e.id === eventId || e.slug === eventId || eventId === 'evt_teddy_afro_01'
+          (e: ConcertEvent) => e.id === eventId || e.slug === eventId
         ) || evData.events?.[0];
 
         if (!found) {
@@ -56,12 +62,26 @@ export default function WatchEventPage() {
         }
         setEvent(found);
 
-        // Fetch or request token with multi-camera metadata
+        // 3. Resolve ticket pass for this event
+        const matchingTicket = tickets.find(
+          (t: any) => (t.eventId === found.id || t.eventId === eventId) && t.status === 'VALID'
+        ) || tickets[0];
+
+        if (!matchingTicket) {
+          setError('No valid ticket entitlement found. Please purchase a pass or redeem your ticket code.');
+          setLoading(false);
+          return;
+        }
+
+        setActiveTicketCode(matchingTicket.ticketCode);
+
+        // 4. Request stream authorization token with verified ticket pass
         const tokenRes = await fetch('/api/v1/streams/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
-            ticketCode: 'TKT-TED-VIP-0001-9X8K2', // authenticated pass
+            ticketCode: matchingTicket.ticketCode,
             eventId: found.id
           })
         });
@@ -74,20 +94,7 @@ export default function WatchEventPage() {
           if (tokenData.cameraMode) setCameraMode(tokenData.cameraMode);
           if (tokenData.activeCamera) setActiveCamera(tokenData.activeCamera);
         } else {
-          // Fallback to active stream channel
-          setChannel({
-            id: 'ch_veronica_live',
-            eventId: found.id,
-            status: 'LIVE',
-            hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
-            qualities: [],
-            primaryIngestRtmp: '',
-            backupIngestRtmp: '',
-            streamKey: '',
-            fps: 60,
-            currentBitrateKbps: 4800,
-            dropFrames: 0
-          });
+          setError(tokenData.error || 'Failed to authorize live stream playback.');
         }
       } catch (err: any) {
         setError(err.message);
@@ -139,13 +146,13 @@ export default function WatchEventPage() {
           {/* Edge-to-Edge Player on Mobile */}
           <div className="w-full bg-black sm:rounded-2xl overflow-hidden shadow-2xl sm:border border-line">
             <Player
-              streamUrl={channel?.hlsMasterUrl || 'https://www.youtube.com/watch?v=mSrVwIRKASI'}
+              streamUrl={channel?.hlsMasterUrl || ''}
               posterUrl={event.bannerImage}
               eventName={event.title}
               eventId={event.id}
               isLive={isLive}
               streamToken={streamToken}
-              ticketCode="TKT-TED-VIP-0001-9X8K2"
+              ticketCode={activeTicketCode}
               cameraMode={cameraMode}
               availableCameras={availableCameras}
               initialActiveCameraId={activeCamera?.id}
@@ -212,7 +219,7 @@ export default function WatchEventPage() {
             </div>
 
             <div className="pt-3 border-t border-line/60 flex items-center justify-between text-[11px] text-muted">
-              <span>Broadcast Protocol: <strong className="text-white">YouTube HD / HLS ABR</strong></span>
+              <span>Broadcast Protocol: <strong className="text-white">SRS RTMP / HLS ABR</strong></span>
               <span>Audio Mix: <strong className="text-white">Studio 48kHz Stereo AAC</strong></span>
               <span>Live Host: <strong className="text-polo-red">Feshta Fest Ethiopia</strong></span>
             </div>

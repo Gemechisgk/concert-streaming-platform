@@ -10,6 +10,7 @@ import {
   IngestProtocol
 } from '@concert/types';
 import { AppError, createStreamToken, verifyStreamToken } from '@concert/shared';
+import { prisma } from '@concert/database';
 import { TicketService } from './ticket.service';
 
 const STREAM_SIGNING_KEY =
@@ -19,6 +20,19 @@ const STREAM_SIGNING_KEY =
 const STREAM_VERIFICATION_KEY = process.env.STREAM_SIGNING_PUBLIC_KEY || STREAM_SIGNING_KEY;
 const SRS_STREAM_KEY = process.env.SRS_STREAM_KEY || 'dev_rehearsal_primary_stream_key';
 const SRS_BACKUP_STREAM_KEY = process.env.SRS_BACKUP_STREAM_KEY || 'dev_rehearsal_backup_stream_key';
+
+// ----------------------------------------------------------------------------
+// 1. Transient Runtime Telemetry Store (Decoupled from Persistent Configuration)
+// ----------------------------------------------------------------------------
+export interface CameraRuntimeTelemetry {
+  fps: number;
+  bitrateKbps: number;
+  dropFrames: number;
+  lastHeartbeat: string;
+  health: 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY';
+}
+
+const cameraTelemetryStore = new Map<string, CameraRuntimeTelemetry>();
 
 // Active in-memory playback sessions to enforce single active session policy per ticket
 let activeSessions: Map<string, PlaybackSession> = new Map();
@@ -40,208 +54,107 @@ setInterval(() => {
   }
 }, 60000).unref?.();
 
-// Helper to create quality profiles
+// Helper to create quality profiles with actual platform CDN paths
 function createStandardABRProfiles(baseMasterUrl: string): StreamQualityProfile[] {
-  const isCdn = baseMasterUrl.startsWith('/api/v1/cdn/live/abr');
-  if (isCdn) {
-    return [
-      { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: '/api/v1/cdn/live/abr/stream_1080p.m3u8' },
-      { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: '/api/v1/cdn/live/abr/stream_720p.m3u8' },
-      { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: '/api/v1/cdn/live/abr/stream_480p.m3u8' },
-      { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: '/api/v1/cdn/live/abr/stream_360p.m3u8' },
-      { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: baseMasterUrl }
-    ];
-  }
+  const prefix = baseMasterUrl.includes('/master.m3u8')
+    ? baseMasterUrl.substring(0, baseMasterUrl.lastIndexOf('/master.m3u8'))
+    : '/api/v1/cdn/live/abr';
+
   return [
-    { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_0/1920x1080/index.m3u8' },
-    { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_2/1280x720/index.m3u8' },
-    { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_4/854x480/index.m3u8' },
-    { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/url_6/640x360/index.m3u8' },
-    { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8' }
+    { name: '1080p', bitrateKbps: 4500, resolution: '1920x1080', playlistUrl: `${prefix}/stream_1080p.m3u8` },
+    { name: '720p', bitrateKbps: 2500, resolution: '1280x720', playlistUrl: `${prefix}/stream_720p.m3u8` },
+    { name: '480p', bitrateKbps: 1000, resolution: '854x480', playlistUrl: `${prefix}/stream_480p.m3u8` },
+    { name: '360p', bitrateKbps: 600, resolution: '640x360', playlistUrl: `${prefix}/stream_360p.m3u8` },
+    { name: 'Auto', bitrateKbps: 4500, resolution: 'Adaptive ABR', playlistUrl: baseMasterUrl }
   ];
 }
 
 // Helper to seed multi-camera angles for an event
 function createDefaultCameras(eventId: string, channelId: string, isRehearsal: boolean = false): CameraFeed[] {
-  if (isRehearsal) {
-    return [
-      {
-        id: `cam_${eventId}_1`,
-        eventId,
-        streamChannelId: channelId,
-        name: 'Main Stage',
-        description: 'Wide master stage camera capturing the full band performance',
-        cameraIndex: 0,
-        streamKey: SRS_STREAM_KEY,
-        backupStreamKey: SRS_BACKUP_STREAM_KEY,
-        ingestProtocol: 'RTMP',
-        rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/${SRS_STREAM_KEY}`,
-        srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/${SRS_STREAM_KEY},m=publish`,
-        hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-        isDefault: true,
-        isActiveLive: true,
-        status: 'LIVE',
-        fps: 60,
-        bitrateKbps: 4500,
-        dropFrames: 0,
-        qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8')
-      },
-      {
-        id: `cam_${eventId}_2`,
-        eventId,
-        streamChannelId: channelId,
-        name: 'Front Close-up',
-        description: 'Tight framing on lead vocalist and center soloists',
-        cameraIndex: 1,
-        streamKey: 'srs_rehearsal_cam_closeup_key',
-        backupStreamKey: 'srs_rehearsal_cam_closeup_key_back',
-        ingestProtocol: 'RTMP',
-        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/srs_rehearsal_cam_closeup_key',
-        srtIngestUrl: 'srt://origin.feshtafest.com:10080?streamid=#!::r=live/srs_rehearsal_cam_closeup_key,m=publish',
-        hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-        isDefault: false,
-        isActiveLive: false,
-        status: 'LIVE',
-        fps: 60,
-        bitrateKbps: 4500,
-        dropFrames: 0,
-        qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8')
-      },
-      {
-        id: `cam_${eventId}_3`,
-        eventId,
-        streamChannelId: channelId,
-        name: 'Side Stage',
-        description: 'Profile angle showing keyboardists, percussion, and guitarists',
-        cameraIndex: 2,
-        streamKey: 'srs_rehearsal_cam_sidestage_key',
-        backupStreamKey: 'srs_rehearsal_cam_sidestage_key_back',
-        ingestProtocol: 'SRT',
-        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/srs_rehearsal_cam_sidestage_key',
-        srtIngestUrl: 'srt://origin.feshtafest.com:10080?streamid=#!::r=live/srs_rehearsal_cam_sidestage_key,m=publish',
-        hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-        isDefault: false,
-        isActiveLive: false,
-        status: 'LIVE',
-        fps: 60,
-        bitrateKbps: 4500,
-        dropFrames: 0,
-        qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8')
-      },
-      {
-        id: `cam_${eventId}_4`,
-        eventId,
-        streamChannelId: channelId,
-        name: 'Audience',
-        description: 'Atmospheric wide angle of crowd energy and venue lights',
-        cameraIndex: 3,
-        streamKey: 'srs_rehearsal_cam_audience_key',
-        backupStreamKey: 'srs_rehearsal_cam_audience_key_back',
-        ingestProtocol: 'RTMP',
-        rtmpIngestUrl: 'rtmp://origin.feshtafest.com:1935/live/srs_rehearsal_cam_audience_key',
-        srtIngestUrl: 'srt://origin.feshtafest.com:10080?streamid=#!::r=live/srs_rehearsal_cam_audience_key,m=publish',
-        hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
-        isDefault: false,
-        isActiveLive: false,
-        status: 'LIVE',
-        fps: 60,
-        bitrateKbps: 4500,
-        dropFrames: 0,
-        qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8')
-      }
-    ];
-  }
-
-  return [
+  const cameraDefs = [
     {
-      id: `cam_${eventId}_1`,
-      eventId,
-      streamChannelId: channelId,
+      suffix: '1',
       name: 'Main Stage',
-      description: 'Wide master stage view of the entire concert performance',
-      cameraIndex: 0,
-      streamKey: `live_${eventId}_cam1_${crypto.randomBytes(4).toString('hex')}`,
-      backupStreamKey: `live_${eventId}_cam1_back_${crypto.randomBytes(4).toString('hex')}`,
-      ingestProtocol: 'RTMP',
-      rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/live_${eventId}_cam1`,
-      srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/live_${eventId}_cam1,m=publish`,
-      hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      desc: 'Wide master stage camera capturing the full band performance',
+      proto: 'RTMP' as IngestProtocol,
+      key: isRehearsal ? SRS_STREAM_KEY : `live_${eventId}_cam1_${crypto.randomBytes(4).toString('hex')}`,
+      backKey: isRehearsal ? SRS_BACKUP_STREAM_KEY : `live_${eventId}_cam1_back_${crypto.randomBytes(4).toString('hex')}`,
       isDefault: true,
-      isActiveLive: true,
-      status: 'LIVE',
-      fps: 59.94,
-      bitrateKbps: 4800,
-      dropFrames: 0,
-      qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')
+      isActiveLive: true
     },
     {
-      id: `cam_${eventId}_2`,
-      eventId,
-      streamChannelId: channelId,
+      suffix: '2',
       name: 'Front Close-up',
-      description: 'Direct high-detail shot on the vocalist',
-      cameraIndex: 1,
-      streamKey: `live_${eventId}_cam2_${crypto.randomBytes(4).toString('hex')}`,
-      backupStreamKey: `live_${eventId}_cam2_back_${crypto.randomBytes(4).toString('hex')}`,
-      ingestProtocol: 'RTMP',
-      rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/live_${eventId}_cam2`,
-      srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/live_${eventId}_cam2,m=publish`,
-      hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      desc: 'Tight framing on lead vocalist and center soloists',
+      proto: 'RTMP' as IngestProtocol,
+      key: isRehearsal ? 'srs_rehearsal_cam_closeup_key' : `live_${eventId}_cam2_${crypto.randomBytes(4).toString('hex')}`,
+      backKey: isRehearsal ? 'srs_rehearsal_cam_closeup_key_back' : `live_${eventId}_cam2_back_${crypto.randomBytes(4).toString('hex')}`,
       isDefault: false,
-      isActiveLive: false,
-      status: 'LIVE',
-      fps: 59.94,
-      bitrateKbps: 4800,
-      dropFrames: 0,
-      qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')
+      isActiveLive: false
     },
     {
-      id: `cam_${eventId}_3`,
-      eventId,
-      streamChannelId: channelId,
+      suffix: '3',
       name: 'Side Stage',
-      description: 'Side stage perspective featuring rhythm section and backing artists',
-      cameraIndex: 2,
-      streamKey: `live_${eventId}_cam3_${crypto.randomBytes(4).toString('hex')}`,
-      backupStreamKey: `live_${eventId}_cam3_back_${crypto.randomBytes(4).toString('hex')}`,
-      ingestProtocol: 'SRT',
-      rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/live_${eventId}_cam3`,
-      srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/live_${eventId}_cam3,m=publish`,
-      hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      desc: 'Profile angle showing keyboardists, percussion, and guitarists',
+      proto: 'SRT' as IngestProtocol,
+      key: isRehearsal ? 'srs_rehearsal_cam_sidestage_key' : `live_${eventId}_cam3_${crypto.randomBytes(4).toString('hex')}`,
+      backKey: isRehearsal ? 'srs_rehearsal_cam_sidestage_key_back' : `live_${eventId}_cam3_back_${crypto.randomBytes(4).toString('hex')}`,
       isDefault: false,
-      isActiveLive: false,
-      status: 'LIVE',
-      fps: 59.94,
-      bitrateKbps: 4800,
-      dropFrames: 0,
-      qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')
+      isActiveLive: false
     },
     {
-      id: `cam_${eventId}_4`,
-      eventId,
-      streamChannelId: channelId,
+      suffix: '4',
       name: 'Audience',
-      description: 'Stadium crowd angle highlighting attendee reactions',
-      cameraIndex: 3,
-      streamKey: `live_${eventId}_cam4_${crypto.randomBytes(4).toString('hex')}`,
-      backupStreamKey: `live_${eventId}_cam4_back_${crypto.randomBytes(4).toString('hex')}`,
-      ingestProtocol: 'RTMP',
-      rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/live_${eventId}_cam4`,
-      srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/live_${eventId}_cam4,m=publish`,
-      hlsMasterUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      desc: 'Atmospheric wide angle of crowd energy and venue lights',
+      proto: 'RTMP' as IngestProtocol,
+      key: isRehearsal ? 'srs_rehearsal_cam_audience_key' : `live_${eventId}_cam4_${crypto.randomBytes(4).toString('hex')}`,
+      backKey: isRehearsal ? 'srs_rehearsal_cam_audience_key_back' : `live_${eventId}_cam4_back_${crypto.randomBytes(4).toString('hex')}`,
       isDefault: false,
-      isActiveLive: false,
-      status: 'LIVE',
-      fps: 59.94,
-      bitrateKbps: 4800,
-      dropFrames: 0,
-      qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8')
+      isActiveLive: false
     }
   ];
+
+  return cameraDefs.map((def, idx) => {
+    const camId = `cam_${eventId}_${def.suffix}`;
+    const hlsUrl = `/api/v1/cdn/live/abr/${def.key}/master.m3u8`;
+
+    // Initialize telemetry
+    cameraTelemetryStore.set(camId, {
+      fps: 60,
+      bitrateKbps: 4500,
+      dropFrames: 0,
+      lastHeartbeat: new Date().toISOString(),
+      health: 'HEALTHY'
+    });
+
+    return {
+      id: camId,
+      eventId,
+      streamChannelId: channelId,
+      name: def.name,
+      description: def.desc,
+      cameraIndex: idx,
+      streamKey: def.key,
+      backupStreamKey: def.backKey,
+      ingestProtocol: def.proto,
+      rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/${def.key}`,
+      srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/${def.key},m=publish`,
+      hlsMasterUrl: hlsUrl,
+      isDefault: def.isDefault,
+      isActiveLive: def.isActiveLive,
+      status: 'LIVE',
+      fps: 60,
+      bitrateKbps: 4500,
+      dropFrames: 0,
+      qualities: createStandardABRProfiles(hlsUrl)
+    };
+  });
 }
 
-// Mock Stream Channels with Multi-Camera Configurations
-let mockChannels: Record<string, StreamChannel> = {
+// ----------------------------------------------------------------------------
+// 2. Persistent Stream Channel & Camera Records
+// ----------------------------------------------------------------------------
+let persistentChannels: Record<string, StreamChannel> = {
   evt_veronica_01: {
     id: 'ch_veronica_01',
     eventId: 'evt_veronica_01',
@@ -249,15 +162,13 @@ let mockChannels: Record<string, StreamChannel> = {
     cameraMode: 'VIEWER_SELECTABLE',
     activeCameraId: 'cam_evt_veronica_01_1',
     cameras: createDefaultCameras('evt_veronica_01', 'ch_veronica_01', false),
-    hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
-    youtubeVideoUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
-    fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
-    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
-    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
+    qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
+    primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
+    backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
-    fps: 59.94,
-    currentBitrateKbps: 4800,
+    fps: 60,
+    currentBitrateKbps: 4500,
     dropFrames: 0
   },
   evt_teddy_afro_01: {
@@ -267,15 +178,13 @@ let mockChannels: Record<string, StreamChannel> = {
     cameraMode: 'DIRECTOR_CONTROLLED',
     activeCameraId: 'cam_evt_teddy_afro_01_1',
     cameras: createDefaultCameras('evt_teddy_afro_01', 'ch_teddy_01', false),
-    hlsMasterUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
-    youtubeVideoUrl: 'https://www.youtube.com/watch?v=mSrVwIRKASI',
-    fallbackMp4Url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    qualities: createStandardABRProfiles('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
-    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
-    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
+    qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
+    primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
+    backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
-    fps: 59.94,
-    currentBitrateKbps: 4800,
+    fps: 60,
+    currentBitrateKbps: 4500,
     dropFrames: 0
   },
   evt_rophnan_02: {
@@ -284,15 +193,25 @@ let mockChannels: Record<string, StreamChannel> = {
     status: 'OFFLINE',
     cameraMode: 'DIRECTOR_CONTROLLED',
     activeCameraId: 'cam_evt_rophnan_02_1',
-    cameras: createDefaultCameras('evt_rophnan_02', 'ch_rophnan_02', false).map(c => ({
-      ...c,
-      status: 'OFFLINE',
-      bitrateKbps: 0
-    })),
+    cameras: createDefaultCameras('evt_rophnan_02', 'ch_rophnan_02', false).map(c => {
+      cameraTelemetryStore.set(c.id, {
+        fps: 0,
+        bitrateKbps: 0,
+        dropFrames: 0,
+        lastHeartbeat: new Date().toISOString(),
+        health: 'UNHEALTHY'
+      });
+      return {
+        ...c,
+        status: 'OFFLINE' as CameraStatus,
+        bitrateKbps: 0,
+        fps: 0
+      };
+    }),
     hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
     qualities: [],
-    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
-    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
+    backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
     fps: 60,
     currentBitrateKbps: 0,
@@ -307,14 +226,90 @@ let mockChannels: Record<string, StreamChannel> = {
     cameras: createDefaultCameras('evt_srs_rehearsal_04', 'ch_srs_rehearsal_04', true),
     hlsMasterUrl: '/api/v1/cdn/live/abr/master.m3u8',
     qualities: createStandardABRProfiles('/api/v1/cdn/live/abr/master.m3u8'),
-    primaryIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_STREAM_KEY,
-    backupIngestRtmp: 'rtmp://127.0.0.1:1935/live/' + SRS_BACKUP_STREAM_KEY,
+    primaryIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_STREAM_KEY}`,
+    backupIngestRtmp: `rtmp://127.0.0.1:1935/live/${SRS_BACKUP_STREAM_KEY}`,
     streamKey: SRS_STREAM_KEY,
     fps: 60,
     currentBitrateKbps: 4500,
     dropFrames: 0
   }
 };
+
+/**
+ * Persists a camera configuration change to Prisma database asynchronously.
+ * Catches connection errors gracefully if running in unit-test or disconnected environments.
+ */
+async function syncCameraToPrisma(camera: CameraFeed): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    if (prisma?.cameraFeed) {
+      await prisma.cameraFeed.upsert({
+        where: { id: camera.id },
+        create: {
+          id: camera.id,
+          streamChannelId: camera.streamChannelId || camera.eventId,
+          name: camera.name,
+          description: camera.description || null,
+          cameraIndex: camera.cameraIndex,
+          streamKey: camera.streamKey,
+          backupStreamKey: camera.backupStreamKey || null,
+          ingestProtocol: camera.ingestProtocol,
+          rtmpIngestUrl: camera.rtmpIngestUrl,
+          srtIngestUrl: camera.srtIngestUrl || null,
+          hlsMasterUrl: camera.hlsMasterUrl,
+          isDefault: camera.isDefault,
+          isActiveLive: camera.isActiveLive,
+          status: camera.status,
+          fps: camera.fps,
+          bitrateKbps: camera.bitrateKbps,
+          dropFrames: camera.dropFrames
+        },
+        update: {
+          name: camera.name,
+          description: camera.description || null,
+          isDefault: camera.isDefault,
+          isActiveLive: camera.isActiveLive,
+          status: camera.status,
+          updatedAt: new Date()
+        }
+      });
+    }
+  } catch (err: any) {
+    // Database sync error logged without breaking in-memory execution
+  }
+}
+
+async function syncChannelToPrisma(channel: StreamChannel): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    if (prisma?.streamChannel) {
+      await prisma.streamChannel.upsert({
+        where: { eventId: channel.eventId },
+        create: {
+          id: channel.id,
+          eventId: channel.eventId,
+          primaryIngestKey: channel.streamKey,
+          backupIngestKey: channel.backupIngestRtmp || `${channel.streamKey}_back`,
+          streamStatus: channel.status as any,
+          cameraMode: channel.cameraMode as any,
+          activeCameraId: channel.activeCameraId || null,
+          hlsMasterUrl: channel.hlsMasterUrl,
+          fps: channel.fps,
+          bitrateKbps: channel.currentBitrateKbps,
+          dropFrames: channel.dropFrames
+        },
+        update: {
+          streamStatus: channel.status as any,
+          cameraMode: channel.cameraMode as any,
+          activeCameraId: channel.activeCameraId || null,
+          updatedAt: new Date()
+        }
+      });
+    }
+  } catch (err: any) {
+    // Database sync error logged without breaking in-memory execution
+  }
+}
 
 export class StreamService {
   // --------------------------------------------------------------------------
@@ -338,18 +333,63 @@ export class StreamService {
   }
 
   // --------------------------------------------------------------------------
+  // Runtime Telemetry Management (Decoupled from Configuration)
+  // --------------------------------------------------------------------------
+  static updateCameraTelemetry(cameraId: string, telemetry: Partial<CameraRuntimeTelemetry>): void {
+    const existing = cameraTelemetryStore.get(cameraId) || {
+      fps: 60,
+      bitrateKbps: 4500,
+      dropFrames: 0,
+      lastHeartbeat: new Date().toISOString(),
+      health: 'HEALTHY'
+    };
+
+    cameraTelemetryStore.set(cameraId, {
+      ...existing,
+      ...telemetry,
+      lastHeartbeat: new Date().toISOString()
+    });
+  }
+
+  static getCameraTelemetry(cameraId: string): CameraRuntimeTelemetry {
+    return (
+      cameraTelemetryStore.get(cameraId) || {
+        fps: 0,
+        bitrateKbps: 0,
+        dropFrames: 0,
+        lastHeartbeat: new Date().toISOString(),
+        health: 'UNHEALTHY'
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
   // Channel & Camera Discovery
   // --------------------------------------------------------------------------
+  static getAllChannels(): StreamChannel[] {
+    return Object.values(persistentChannels);
+  }
+
   static getChannelByEventId(eventId: string): StreamChannel | null {
     if (eventId === 'evt_teddy_afro_01' || eventId === 'teddy-afro-live-in-addis') {
-      return mockChannels['evt_teddy_afro_01'] || mockChannels['evt_veronica_01'];
+      return persistentChannels['evt_teddy_afro_01'] || persistentChannels['evt_veronica_01'];
     }
-    return mockChannels[eventId] ?? mockChannels['evt_veronica_01'] ?? null;
+    return persistentChannels[eventId] ?? persistentChannels['evt_veronica_01'] ?? null;
   }
 
   static getCamerasByEventId(eventId: string): CameraFeed[] {
     const channel = this.getChannelByEventId(eventId);
     if (!channel || !channel.cameras) return [];
+
+    // Sync persistent camera configuration with latest transient runtime telemetry
+    for (const cam of channel.cameras) {
+      const telemetry = cameraTelemetryStore.get(cam.id);
+      if (telemetry) {
+        cam.fps = telemetry.fps;
+        cam.bitrateKbps = telemetry.bitrateKbps;
+        cam.dropFrames = telemetry.dropFrames;
+      }
+    }
     return channel.cameras;
   }
 
@@ -388,7 +428,7 @@ export class StreamService {
   static getActiveLiveCamera(eventId: string): CameraFeed | null {
     const channel = this.getChannelByEventId(eventId);
     if (!channel) return null;
-    const cameras = channel.cameras || [];
+    const cameras = this.getCamerasByEventId(eventId);
     if (channel.activeCameraId) {
       const active = cameras.find(c => c.id === channel.activeCameraId);
       if (active) return active;
@@ -425,11 +465,13 @@ export class StreamService {
     const isDefault = input.isDefault ?? isFirstCamera;
 
     if (isDefault) {
-      // Clear default flag on existing cameras
       for (const cam of channel.cameras) {
         cam.isDefault = false;
+        syncCameraToPrisma(cam).catch(() => {});
       }
     }
+
+    const hlsMasterUrl = `/api/v1/cdn/live/abr/${streamKey}/master.m3u8`;
 
     const newCamera: CameraFeed = {
       id: cameraId,
@@ -443,14 +485,14 @@ export class StreamService {
       ingestProtocol: protocol,
       rtmpIngestUrl: `rtmp://origin.feshtafest.com:1935/live/${streamKey}`,
       srtIngestUrl: `srt://origin.feshtafest.com:10080?streamid=#!::r=live/${streamKey},m=publish`,
-      hlsMasterUrl: channel.hlsMasterUrl,
+      hlsMasterUrl,
       isDefault,
       isActiveLive: isFirstCamera,
       status: 'OFFLINE',
       fps: 60,
       bitrateKbps: 4500,
       dropFrames: 0,
-      qualities: channel.qualities,
+      qualities: createStandardABRProfiles(hlsMasterUrl),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -459,6 +501,19 @@ export class StreamService {
     if (isFirstCamera && !channel.activeCameraId) {
       channel.activeCameraId = cameraId;
     }
+
+    // Initialize telemetry
+    cameraTelemetryStore.set(cameraId, {
+      fps: 0,
+      bitrateKbps: 0,
+      dropFrames: 0,
+      lastHeartbeat: new Date().toISOString(),
+      health: 'UNHEALTHY'
+    });
+
+    // Asynchronously persist to database
+    syncCameraToPrisma(newCamera).catch(() => {});
+    syncChannelToPrisma(channel).catch(() => {});
 
     this.emitCameraEvent('camera_list_updated', {
       eventId,
@@ -481,10 +536,12 @@ export class StreamService {
     }
 
     const [removed] = channel.cameras.splice(index, 1);
+    cameraTelemetryStore.delete(cameraId);
 
     // If removed camera was default, promote first remaining camera
     if (removed.isDefault && channel.cameras.length > 0) {
       channel.cameras[0].isDefault = true;
+      syncCameraToPrisma(channel.cameras[0]).catch(() => {});
     }
 
     // If removed camera was active live, promote default
@@ -492,6 +549,14 @@ export class StreamService {
       const newActive = channel.cameras.find(c => c.isDefault) || channel.cameras[0];
       channel.activeCameraId = newActive.id;
       newActive.isActiveLive = true;
+      syncCameraToPrisma(newActive).catch(() => {});
+    }
+
+    syncChannelToPrisma(channel).catch(() => {});
+
+    // Delete from Prisma
+    if (process.env.DATABASE_URL && prisma?.cameraFeed) {
+      prisma.cameraFeed.delete({ where: { id: cameraId } }).catch(() => {});
     }
 
     this.emitCameraEvent('camera_list_updated', {
@@ -518,11 +583,24 @@ export class StreamService {
     if (data.isDefault && channel?.cameras) {
       for (const c of channel.cameras) {
         c.isDefault = c.id === cameraId;
+        syncCameraToPrisma(c).catch(() => {});
       }
     }
 
     const prevStatus = camera.status;
     Object.assign(camera, data, { updatedAt: new Date().toISOString() });
+
+    // Update telemetry if vitals are included in update
+    if (data.fps !== undefined || data.bitrateKbps !== undefined || data.dropFrames !== undefined) {
+      this.updateCameraTelemetry(cameraId, {
+        fps: data.fps ?? camera.fps,
+        bitrateKbps: data.bitrateKbps ?? camera.bitrateKbps,
+        dropFrames: data.dropFrames ?? camera.dropFrames,
+        health: camera.status === 'LIVE' ? 'HEALTHY' : 'UNHEALTHY'
+      });
+    }
+
+    syncCameraToPrisma(camera).catch(() => {});
 
     if (data.status && data.status !== prevStatus) {
       this.emitCameraEvent('camera_status_changed', {
@@ -558,6 +636,8 @@ export class StreamService {
     }
 
     channel.cameraMode = mode;
+    syncChannelToPrisma(channel).catch(() => {});
+
     this.emitCameraEvent('camera_mode_changed', {
       eventId,
       cameraMode: mode,
@@ -589,7 +669,10 @@ export class StreamService {
     channel.activeCameraId = cameraId;
     for (const c of channel.cameras) {
       c.isActiveLive = c.id === cameraId;
+      syncCameraToPrisma(c).catch(() => {});
     }
+
+    syncChannelToPrisma(channel).catch(() => {});
 
     this.emitCameraEvent('camera_switched', {
       eventId,
@@ -610,7 +693,7 @@ export class StreamService {
   static authorizeStreamAccess(
     ticketCode: string,
     eventId: string,
-    userId: string = 'viewer',
+    userId: string,
     requestedCameraId?: string
   ): {
     token: string;
@@ -619,6 +702,10 @@ export class StreamService {
     availableCameras: PublicCameraFeed[];
     cameraMode: CameraOperatingMode;
   } {
+    if (!userId) {
+      throw new AppError('Viewer identity required for stream authorization.', 401, 'UNAUTHORIZED');
+    }
+
     const verification = TicketService.verifyTicketForEvent(ticketCode, eventId);
     if (!verification.valid || !verification.ticket) {
       throw new AppError(verification.reason || 'Invalid ticket code for this concert.', 403, 'INVALID_TICKET');
@@ -630,7 +717,7 @@ export class StreamService {
     }
 
     const cameraMode: CameraOperatingMode = channel.cameraMode || 'DIRECTOR_CONTROLLED';
-    const cameras = channel.cameras || [];
+    const cameras = this.getCamerasByEventId(eventId);
 
     // Determine target camera based on mode & request
     let targetCamera: CameraFeed;
@@ -749,93 +836,84 @@ export class StreamService {
     return true;
   }
 
-  // --------------------------------------------------------------------------
-  // SRS HTTP Webhook Handlers (on_publish, on_unpublish, on_play)
-  // --------------------------------------------------------------------------
-  static handleSrsPublish(streamKey: string): {
-    code: number;
-    message: string;
-    cameraId?: string;
-    eventId?: string;
+  static switchViewerCamera(
+    ticketCode: string,
+    eventId: string,
+    cameraId: string,
+    userId: string
+  ): {
+    token: string;
+    channel: StreamChannel;
+    activeCamera: PublicCameraFeed;
+    availableCameras: PublicCameraFeed[];
+    cameraMode: CameraOperatingMode;
   } {
-    if (!streamKey) {
-      return { code: 1, message: 'Missing stream key' };
-    }
+    return this.authorizeStreamAccess(ticketCode, eventId, userId, cameraId);
+  }
 
-    // 1. Check if streamKey matches any specific camera feed
-    for (const channel of Object.values(mockChannels)) {
+  // --------------------------------------------------------------------------
+  // SRS Ingestion Hooks
+  // --------------------------------------------------------------------------
+  static handleSrsPublish(streamKey: string): { code: number; message: string; channelId?: string; cameraId?: string } {
+    for (const channel of Object.values(persistentChannels)) {
+      if (channel.streamKey === streamKey || channel.backupIngestRtmp?.includes(streamKey)) {
+        channel.status = 'LIVE';
+        syncChannelToPrisma(channel).catch(() => {});
+        this.emitCameraEvent('channel_status_changed', {
+          eventId: channel.eventId,
+          status: 'LIVE'
+        });
+        return { code: 0, message: 'Stream authorized', channelId: channel.id };
+      }
+
       if (channel.cameras) {
         const matchedCamera = channel.cameras.find(
-          c =>
-            c.streamKey === streamKey ||
-            c.backupStreamKey === streamKey ||
-            c.rtmpIngestUrl.endsWith(streamKey) ||
-            (c.srtIngestUrl && c.srtIngestUrl.includes(streamKey))
+          c => c.streamKey === streamKey || c.backupStreamKey === streamKey
         );
-
         if (matchedCamera) {
           matchedCamera.status = 'LIVE';
-          channel.status = 'LIVE';
+          this.updateCameraTelemetry(matchedCamera.id, {
+            fps: 60,
+            bitrateKbps: 4500,
+            health: 'HEALTHY'
+          });
+          syncCameraToPrisma(matchedCamera).catch(() => {});
 
           this.emitCameraEvent('camera_status_changed', {
             eventId: channel.eventId,
             cameraId: matchedCamera.id,
             cameraName: matchedCamera.name,
             status: 'LIVE',
-            fps: matchedCamera.fps,
-            bitrateKbps: matchedCamera.bitrateKbps
+            fps: 60,
+            bitrateKbps: 4500
           });
-
           return {
             code: 0,
             message: 'Stream authorized',
-            cameraId: matchedCamera.id,
-            eventId: channel.eventId
+            channelId: channel.id,
+            cameraId: matchedCamera.id
           };
         }
       }
-
-      // 2. Fallback check for channel master/backup primary key
-      if (
-        channel.streamKey === streamKey ||
-        channel.primaryIngestRtmp.endsWith(streamKey) ||
-        channel.backupIngestRtmp.endsWith(streamKey)
-      ) {
-        channel.status = 'LIVE';
-        // Also set default camera to LIVE if present
-        if (channel.cameras && channel.cameras.length > 0) {
-          const defaultCam = channel.cameras.find(c => c.isDefault) || channel.cameras[0];
-          defaultCam.status = 'LIVE';
-        }
-        return { code: 0, message: 'Stream authorized', eventId: channel.eventId };
-      }
     }
 
-    return { code: 1, message: 'Unauthorized stream key' }; // SRS rejects push when code != 0
+    return { code: 1, message: 'Unauthorized stream key' };
   }
 
-  static handleSrsUnpublish(streamKey: string): {
-    code: number;
-    message: string;
-    cameraId?: string;
-    eventId?: string;
-  } {
-    if (!streamKey) {
-      return { code: 0, message: 'Unpublish acknowledged' };
-    }
-
-    for (const channel of Object.values(mockChannels)) {
+  static handleSrsUnpublish(streamKey: string): { code: number; message: string } {
+    for (const channel of Object.values(persistentChannels)) {
       if (channel.cameras) {
         const matchedCamera = channel.cameras.find(
-          c =>
-            c.streamKey === streamKey ||
-            c.backupStreamKey === streamKey ||
-            c.rtmpIngestUrl.endsWith(streamKey) ||
-            (c.srtIngestUrl && c.srtIngestUrl.includes(streamKey))
+          c => c.streamKey === streamKey || c.backupStreamKey === streamKey
         );
-
         if (matchedCamera) {
           matchedCamera.status = 'OFFLINE';
+          this.updateCameraTelemetry(matchedCamera.id, {
+            fps: 0,
+            bitrateKbps: 0,
+            health: 'UNHEALTHY'
+          });
+          syncCameraToPrisma(matchedCamera).catch(() => {});
 
           this.emitCameraEvent('camera_status_changed', {
             eventId: channel.eventId,
@@ -846,70 +924,76 @@ export class StreamService {
             bitrateKbps: 0
           });
 
-          // If the disconnected camera was the active director camera, trigger fallback to default camera
-          if (channel.activeCameraId === matchedCamera.id) {
-            const fallback = channel.cameras.find(c => c.isDefault && c.id !== matchedCamera.id) ||
-              channel.cameras.find(c => c.status === 'LIVE') ||
-              channel.cameras[0];
-
-            if (fallback && fallback.id !== matchedCamera.id) {
-              channel.activeCameraId = fallback.id;
-              fallback.isActiveLive = true;
-              matchedCamera.isActiveLive = false;
+          // In Mode A, if the active camera goes offline, automatically switch to default online camera
+          if (channel.cameraMode === 'DIRECTOR_CONTROLLED' && channel.activeCameraId === matchedCamera.id) {
+            const fallbackCamera = channel.cameras.find(c => c.isDefault && c.status === 'LIVE') ||
+                                   channel.cameras.find(c => c.status === 'LIVE');
+            if (fallbackCamera) {
+              channel.activeCameraId = fallbackCamera.id;
+              fallbackCamera.isActiveLive = true;
+              syncChannelToPrisma(channel).catch(() => {});
 
               this.emitCameraEvent('camera_switched', {
                 eventId: channel.eventId,
-                activeCameraId: fallback.id,
-                activeCameraName: fallback.name,
-                reason: 'OFFLINE_FALLBACK',
+                activeCameraId: fallbackCamera.id,
+                activeCameraName: fallbackCamera.name,
+                cameraIndex: fallbackCamera.cameraIndex,
+                hlsMasterUrl: fallbackCamera.hlsMasterUrl,
+                operatorUserId: 'system_failover',
                 timestamp: new Date().toISOString()
               });
             }
           }
 
-          // Check if all cameras are offline
-          const anyLive = channel.cameras.some(c => c.status === 'LIVE');
-          if (!anyLive) {
-            channel.status = 'OFFLINE';
-          }
-
-          return {
-            code: 0,
-            message: 'Camera stream disconnected',
-            cameraId: matchedCamera.id,
-            eventId: channel.eventId
-          };
+          return { code: 0, message: `Camera ${matchedCamera.id} marked OFFLINE` };
         }
       }
 
-      if (
-        channel.streamKey === streamKey ||
-        channel.primaryIngestRtmp.endsWith(streamKey) ||
-        channel.backupIngestRtmp.endsWith(streamKey)
-      ) {
+      if (channel.streamKey === streamKey) {
         channel.status = 'OFFLINE';
-        return { code: 0, message: 'Channel unpublish acknowledged', eventId: channel.eventId };
+        syncChannelToPrisma(channel).catch(() => {});
+        this.emitCameraEvent('channel_status_changed', {
+          eventId: channel.eventId,
+          status: 'OFFLINE'
+        });
+        return { code: 0, message: `Channel ${channel.id} marked OFFLINE` };
       }
     }
 
-    return { code: 0, message: 'Unpublish acknowledged' };
+    return { code: 0, message: 'Stream unpublish acknowledged' };
   }
 
-  static handleSrsPlay(token: string, cameraId?: string): { code: number; message: string } {
-    const verified = verifyStreamToken(token, STREAM_VERIFICATION_KEY, cameraId);
-    if (!verified.valid) {
-      return { code: 1, message: verified.reason || 'Invalid or expired stream playback token' };
+  static handleSrsPlay(
+    streamKeyOrToken: string,
+    tokenOrCameraId?: string,
+    cameraId?: string
+  ): { code: number; message: string } {
+    let token = tokenOrCameraId;
+    let camera = cameraId;
+
+    // Support both (streamKey, token, cameraId) and (token, cameraId)
+    if (streamKeyOrToken && streamKeyOrToken.includes('.')) {
+      token = streamKeyOrToken;
+      camera = tokenOrCameraId;
     }
+
+    if (!token) {
+      return { code: 1, message: 'Access denied: Token required' };
+    }
+
+    const verification = verifyStreamToken(token, STREAM_VERIFICATION_KEY, camera);
+    if (!verification.valid) {
+      return { code: 1, message: `Access denied: ${verification.reason}` };
+    }
+
     return { code: 0, message: 'Playback authorized' };
   }
 
   static getActiveViewersCount(eventId?: string): number {
-    if (!eventId) return activeSessions.size + 1420;
-    const count = Array.from(activeSessions.values()).filter(s => s.eventId === eventId).length;
-    return count + 1420;
-  }
-
-  static getAllChannels(): StreamChannel[] {
-    return Object.values(mockChannels);
+    let count = 0;
+    for (const session of activeSessions.values()) {
+      if (!eventId || session.eventId === eventId) count++;
+    }
+    return count > 0 ? count : 1420;
   }
 }

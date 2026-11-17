@@ -749,7 +749,7 @@ export default function AdminStreamingPage() {
         </div>
       )}
 
-      {/* Feed Preview Modal */}
+      {/* Feed Preview Modal - Real Authorized Camera Video Stream */}
       {previewCamera && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
           <div className="w-full max-w-3xl rounded-3xl border border-line bg-surface p-6 shadow-2xl">
@@ -757,7 +757,7 @@ export default function AdminStreamingPage() {
               <div>
                 <h3 className="text-base font-black text-white uppercase flex items-center gap-2">
                   <Eye className="size-4 text-polo-red" />
-                  Live Preview: {previewCamera.name}
+                  Live Feed Preview: {previewCamera.name}
                 </h3>
                 <span className="text-xs text-muted">
                   {previewCamera.description || 'Raw production camera feed monitoring'}
@@ -771,18 +771,7 @@ export default function AdminStreamingPage() {
               </button>
             </div>
 
-            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black relative border border-line">
-              <iframe
-                src={`https://www.youtube-nocookie.com/embed/mSrVwIRKASI?autoplay=1&mute=1&controls=1&enablejsapi=1`}
-                title={previewCamera.name}
-                className="size-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              />
-              <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black uppercase text-white flex items-center gap-1.5 border border-white/10">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Signal Verified: 1080p60</span>
-              </div>
-            </div>
+            <CameraPreviewPlayer camera={previewCamera} />
 
             <div className="mt-4 flex items-center justify-between text-xs text-muted">
               <span>Ingest: <strong className="text-white">{previewCamera.ingestProtocol}</strong></span>
@@ -792,6 +781,68 @@ export default function AdminStreamingPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CameraPreviewPlayer({ camera }: { camera: CameraFeed }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !camera) return;
+
+    let hlsInstance: any = null;
+    const streamSrc = camera.hlsMasterUrl;
+
+    import('hls.js').then(({ default: Hls }) => {
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hlsInstance.loadSource(streamSrc);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.ERROR, (_: any, data: any) => {
+          if (data.fatal) {
+            setError(`Signal Standby (${camera.status}): Awaiting encoder ingest packet stream.`);
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = streamSrc;
+      }
+    });
+
+    return () => {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+      }
+    };
+  }, [camera]);
+
+  return (
+    <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black relative border border-line flex items-center justify-center">
+      {error && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/85 p-6 text-center">
+          <span className={`size-3 rounded-full mb-3 ${camera.status === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+          <h4 className="text-sm font-black text-white uppercase tracking-wider">{camera.name}</h4>
+          <p className="text-xs text-muted mt-1 max-w-md">{error}</p>
+          <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-neutral-400 bg-surface-raised px-3 py-1.5 rounded-lg border border-line">
+            <span>Stream Key:</span>
+            <span className="text-white font-bold">{camera.streamKey}</span>
+          </div>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        controls
+        className="size-full object-contain"
+      />
+      <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black uppercase text-white flex items-center gap-1.5 border border-white/10 pointer-events-none">
+        <span className={`size-2 rounded-full ${camera.status === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
+        <span>Signal {camera.status}: {camera.fps}fps @ {camera.bitrateKbps}kbps</span>
+      </div>
     </div>
   );
 }
