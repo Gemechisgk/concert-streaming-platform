@@ -57,7 +57,8 @@ export type CheckoutInput = z.infer<typeof CheckoutSchema>;
 // Streaming
 export const StreamTokenRequestSchema = z.object({
   ticketCode: z.string().min(5, 'Ticket code is required'),
-  eventId: z.string().min(1, 'Event ID is required')
+  eventId: z.string().min(1, 'Event ID is required'),
+  cameraId: z.string().optional()
 });
 
 export const StreamHeartbeatSchema = z.object({
@@ -68,9 +69,52 @@ export const StreamHeartbeatSchema = z.object({
   dropFrames: z.number().optional()
 });
 
+// Multi-Camera Management Schemas
+export const CreateCameraSchema = z.object({
+  eventId: z.string().min(1, 'Event ID is required'),
+  name: z.string().min(2, 'Camera name must be at least 2 characters'),
+  description: z.string().optional(),
+  isDefault: z.boolean().optional().default(false),
+  ingestProtocol: z.enum(['RTMP', 'SRT']).optional().default('RTMP')
+});
+export type CreateCameraInput = z.infer<typeof CreateCameraSchema>;
+
+export const UpdateCameraSchema = z.object({
+  name: z.string().min(2).optional(),
+  description: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  status: z.enum(['OFFLINE', 'INGESTING', 'LIVE']).optional(),
+  fps: z.number().optional(),
+  bitrateKbps: z.number().optional(),
+  dropFrames: z.number().optional()
+});
+export type UpdateCameraInput = z.infer<typeof UpdateCameraSchema>;
+
+export const SwitchDirectorCameraSchema = z.object({
+  eventId: z.string().min(1, 'Event ID is required'),
+  cameraId: z.string().min(1, 'Camera ID is required')
+});
+export type SwitchDirectorCameraInput = z.infer<typeof SwitchDirectorCameraSchema>;
+
+export const UpdateCameraModeSchema = z.object({
+  eventId: z.string().min(1, 'Event ID is required'),
+  cameraMode: z.enum(['DIRECTOR_CONTROLLED', 'VIEWER_SELECTABLE'])
+});
+export type UpdateCameraModeInput = z.infer<typeof UpdateCameraModeSchema>;
+
 // SRS Webhooks
 export const SrsPublishHookSchema = z.object({
   action: z.literal('on_publish'),
+  client_id: z.number().or(z.string()),
+  ip: z.string(),
+  vhost: z.string(),
+  app: z.string(),
+  stream: z.string(),
+  param: z.string().optional()
+});
+
+export const SrsUnpublishHookSchema = z.object({
+  action: z.literal('on_unpublish'),
   client_id: z.number().or(z.string()),
   ip: z.string(),
   vhost: z.string(),

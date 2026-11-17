@@ -184,6 +184,18 @@ let mockTickets: Ticket[] = [
     issuedAt: new Date().toISOString()
   },
   {
+    id: 'tkt_veronica_01',
+    orderId: 'ord_demo_veronica',
+    userId: 'user_veronica_viewer',
+    ticketTypeId: 'tt_veronica_vip',
+    ticketCode: 'TKT-VER-VIP-0001-TEST1',
+    qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=TKT-VER-VIP-0001-TEST1',
+    status: 'ACTIVE',
+    event: EventService.getEventById('evt_veronica_01')!,
+    ticketType: mockTicketTypes.find(t => t.id === 'tt_veronica_vip')!,
+    issuedAt: new Date().toISOString()
+  },
+  {
     id: 'tkt_srs_01',
     orderId: 'ord_demo_srs',
     userId: 'user_rehearsal_viewer',

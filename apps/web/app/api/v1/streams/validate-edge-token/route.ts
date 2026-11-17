@@ -18,6 +18,7 @@ const VERIFICATION_KEY = process.env.STREAM_SIGNING_PUBLIC_KEY || process.env.JW
  */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token') || request.headers.get('x-playback-token');
+  const cameraId = request.nextUrl.searchParams.get('camera') || request.headers.get('x-camera-id') || undefined;
 
   if (!token) {
     return NextResponse.json(
@@ -33,10 +34,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const result = verifyStreamToken(token, VERIFICATION_KEY);
+  const result = verifyStreamToken(token, VERIFICATION_KEY, cameraId);
   if (!result.valid) {
     return NextResponse.json(
-      { error: 'Unauthorized: Invalid or expired stream token.', valid: false },
+      { error: `Unauthorized: ${result.reason || 'Invalid or expired stream token.'}`, valid: false },
       {
         status: 403,
         headers: {
@@ -49,14 +50,20 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { valid: true, user: result.payload?.u || 'unknown', event: result.payload?.e || 'unknown' },
+    {
+      valid: true,
+      user: result.payload?.u || 'unknown',
+      event: result.payload?.e || 'unknown',
+      camera: result.payload?.c || 'default'
+    },
     {
       status: 200,
       headers: {
         'Cache-Control': 'private, no-cache, no-store, max-age=0, must-revalidate',
         'Vary': 'Authorization, x-playback-token',
         'X-Edge-Auth': 'ACCEPTED',
-        'X-Viewer-User-Id': result.payload?.u || 'unknown'
+        'X-Viewer-User-Id': result.payload?.u || 'unknown',
+        'X-Camera-Id': result.payload?.c || 'default'
       }
     }
   );

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Player from '@/components/Player';
 import LiveChat from '@/components/LiveChat';
 import GiftTray from '@/components/GiftTray';
-import { ConcertEvent, StreamChannel } from '@concert/types';
+import { ConcertEvent, StreamChannel, PublicCameraFeed, CameraOperatingMode } from '@concert/types';
 import {
   Users,
   Shield,
@@ -17,7 +17,8 @@ import {
   Calendar,
   MapPin,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Video
 } from 'lucide-react';
 
 export default function WatchEventPage() {
@@ -27,6 +28,9 @@ export default function WatchEventPage() {
   const [event, setEvent] = useState<ConcertEvent | null>(null);
   const [channel, setChannel] = useState<StreamChannel | null>(null);
   const [streamToken, setStreamToken] = useState<string>('');
+  const [cameraMode, setCameraMode] = useState<CameraOperatingMode>('VIEWER_SELECTABLE');
+  const [availableCameras, setAvailableCameras] = useState<PublicCameraFeed[]>([]);
+  const [activeCamera, setActiveCamera] = useState<PublicCameraFeed | null>(null);
   const [viewersCount, setViewersCount] = useState<number>(1411);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export default function WatchEventPage() {
         }
         setEvent(found);
 
-        // Fetch or request token
+        // Fetch or request token with multi-camera metadata
         const tokenRes = await fetch('/api/v1/streams/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,6 +70,9 @@ export default function WatchEventPage() {
         if (tokenRes.ok) {
           setStreamToken(tokenData.token);
           setChannel(tokenData.channel);
+          if (tokenData.availableCameras) setAvailableCameras(tokenData.availableCameras);
+          if (tokenData.cameraMode) setCameraMode(tokenData.cameraMode);
+          if (tokenData.activeCamera) setActiveCamera(tokenData.activeCamera);
         } else {
           // Fallback to active stream channel
           setChannel({
@@ -135,8 +142,17 @@ export default function WatchEventPage() {
               streamUrl={channel?.hlsMasterUrl || 'https://www.youtube.com/watch?v=mSrVwIRKASI'}
               posterUrl={event.bannerImage}
               eventName={event.title}
+              eventId={event.id}
               isLive={isLive}
               streamToken={streamToken}
+              ticketCode="TKT-TED-VIP-0001-9X8K2"
+              cameraMode={cameraMode}
+              availableCameras={availableCameras}
+              initialActiveCameraId={activeCamera?.id}
+              onCameraChange={(camId) => {
+                const matched = availableCameras.find(c => c.id === camId);
+                if (matched) setActiveCamera(matched);
+              }}
               onHeartbeat={() => setViewersCount(prev => prev + Math.floor(Math.random() * 5 - 2))}
             />
           </div>

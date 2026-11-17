@@ -308,31 +308,78 @@ enum StreamStatus {
   ENDED
 }
 
+enum CameraSwitchMode {
+  DIRECTOR_CONTROLLED
+  VIEWER_SELECTABLE
+}
+
+enum CameraStatus {
+  OFFLINE
+  INGESTING
+  LIVE
+}
+
+enum IngestProtocol {
+  RTMP
+  SRT
+}
+
 model StreamChannel {
-  id                String       @id @default(uuid())
-  eventId           String       @unique @map("event_id")
-  primaryIngestKey  String       @unique @map("primary_ingest_key")
-  backupIngestKey   String       @unique @map("backup_ingest_key")
-  streamStatus      StreamStatus @default(OFFLINE) @map("stream_status")
-  hlsMasterUrl      String       @map("hls_master_url")
-  fallbackMp4Url    String?      @map("fallback_mp4_url")
-  fps               Int          @default(60)
-  bitrateKbps       Int          @default(4500) @map("bitrate_kbps")
-  dropFrames        Int          @default(0) @map("drop_frames")
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
+  id                String           @id @default(uuid())
+  eventId           String           @unique @map("event_id")
+  primaryIngestKey  String           @unique @map("primary_ingest_key")
+  backupIngestKey   String           @unique @map("backup_ingest_key")
+  streamStatus      StreamStatus     @default(OFFLINE) @map("stream_status")
+  cameraMode        CameraSwitchMode @default(DIRECTOR_CONTROLLED) @map("camera_mode")
+  activeCameraId    String?          @map("active_camera_id")
+  hlsMasterUrl      String           @map("hls_master_url")
+  fallbackMp4Url    String?          @map("fallback_mp4_url")
+  fps               Int              @default(60)
+  bitrateKbps       Int              @default(4500) @map("bitrate_kbps")
+  dropFrames        Int              @default(0) @map("drop_frames")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
 
   event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  cameras          CameraFeed[]
   playbackSessions PlaybackSession[]
   recordings       StreamRecording[]
 
   @@map("stream_channels")
 }
 
+model CameraFeed {
+  id               String         @id @default(uuid())
+  streamChannelId  String         @map("stream_channel_id")
+  name             String
+  description      String?
+  cameraIndex      Int            @default(0) @map("camera_index")
+  streamKey        String         @unique @map("stream_key")
+  backupStreamKey  String?        @unique @map("backup_stream_key")
+  ingestProtocol   IngestProtocol @default(RTMP) @map("ingest_protocol")
+  rtmpIngestUrl    String         @map("rtmp_ingest_url")
+  srtIngestUrl     String?        @map("srt_ingest_url")
+  hlsMasterUrl     String         @map("hls_master_url")
+  isDefault        Boolean        @default(false) @map("is_default")
+  isActiveLive     Boolean        @default(false) @map("is_active_live")
+  status           CameraStatus   @default(OFFLINE)
+  fps              Int            @default(60)
+  bitrateKbps      Int            @default(4500) @map("bitrate_kbps")
+  dropFrames       Int            @default(0) @map("drop_frames")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  streamChannel    StreamChannel  @relation(fields: [streamChannelId], references: [id], onDelete: Cascade)
+
+  @@index([streamChannelId])
+  @@map("camera_feeds")
+}
+
 model PlaybackSession {
   id              String   @id @default(uuid())
   ticketId        String   @map("ticket_id")
   streamChannelId String   @map("stream_channel_id")
+  cameraId        String?  @map("camera_id")
   sessionToken    String   @unique @map("session_token")
   ipAddress       String?  @map("ip_address")
   userAgent       String?  @map("user_agent")

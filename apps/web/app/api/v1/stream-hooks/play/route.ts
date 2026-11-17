@@ -5,11 +5,12 @@ import { StreamService } from '@concert/business-logic';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const param = body.param || ''; // ?token=...
+    const param = body.param || ''; // ?token=...&camera=...
     const urlParams = new URLSearchParams(param.replace(/^\?/, ''));
     const token = urlParams.get('token') || '';
+    const cameraId = urlParams.get('camera') || undefined;
 
-    const res = StreamService.handleSrsPlay(token);
+    const res = StreamService.handleSrsPlay(token, cameraId);
     return NextResponse.json({ code: res.code, message: res.message });
   } catch (err: any) {
     return NextResponse.json({ code: 1, message: err.message }, { status: 400 });

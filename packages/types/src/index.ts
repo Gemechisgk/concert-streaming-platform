@@ -154,10 +154,57 @@ export interface StreamQualityProfile {
   playlistUrl: string;
 }
 
+export type CameraOperatingMode = 'DIRECTOR_CONTROLLED' | 'VIEWER_SELECTABLE';
+export type CameraStatus = 'OFFLINE' | 'INGESTING' | 'LIVE';
+export type IngestProtocol = 'RTMP' | 'SRT';
+
+export interface CameraFeed {
+  id: string;
+  eventId: string;
+  streamChannelId?: string;
+  name: string;
+  description?: string;
+  cameraIndex: number;
+  streamKey: string; // secure publishing credential
+  backupStreamKey?: string;
+  ingestProtocol: IngestProtocol;
+  rtmpIngestUrl: string;
+  srtIngestUrl?: string;
+  hlsMasterUrl: string;
+  isDefault: boolean;
+  isActiveLive: boolean; // active live camera for Director mode
+  status: CameraStatus;
+  fps: number;
+  bitrateKbps: number;
+  dropFrames: number;
+  qualities?: StreamQualityProfile[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Public client-safe representation of a camera (never exposes secret streamKey / credentials)
+export interface PublicCameraFeed {
+  id: string;
+  eventId: string;
+  name: string;
+  description?: string;
+  cameraIndex: number;
+  hlsMasterUrl: string;
+  isDefault: boolean;
+  isActiveLive: boolean;
+  status: CameraStatus;
+  fps: number;
+  bitrateKbps: number;
+  qualities?: StreamQualityProfile[];
+}
+
 export interface StreamChannel {
   id: string;
   eventId: string;
   status: 'OFFLINE' | 'INGESTING' | 'LIVE' | 'ENDED';
+  cameraMode?: CameraOperatingMode;
+  activeCameraId?: string;
+  cameras?: CameraFeed[];
   hlsMasterUrl: string;
   youtubeVideoUrl?: string;
   fallbackMp4Url?: string;
@@ -175,6 +222,7 @@ export interface PlaybackSession {
   ticketId: string;
   userId: string;
   eventId: string;
+  cameraId?: string;
   streamToken: string;
   startedAt: string;
   expiresAt: string;

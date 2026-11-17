@@ -52,22 +52,27 @@ export function isAsymmetricPublicKey(key: string): boolean {
  * Supports asymmetric signing (EC P-256 / RSA 2048) keeping the private key on the backend,
  * or symmetric HMAC-SHA256 when a secret string is supplied.
  * Expiry `exp` is formatted as standard JWT NumericDate in UNIX SECONDS (RFC 7519 §4.1.4).
+ * Optionally scopes the playback token to a specific camera angle `c`.
  */
 export function createStreamToken(
   ticketId: string,
   eventId: string,
   userId: string,
   keyOrSecret: string,
-  ttlSeconds: number = 15 * 60
+  ttlSeconds: number = 15 * 60,
+  cameraId?: string
 ): string {
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const payload = {
+  const payload: { t: string; e: string; u: string; iat: number; exp: number; c?: string } = {
     t: ticketId,
     e: eventId,
     u: userId,
     iat: nowSeconds,
     exp: nowSeconds + ttlSeconds
   };
+  if (cameraId) {
+    payload.c = cameraId;
+  }
 
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
 
@@ -98,8 +103,13 @@ export function createStreamToken(
 /**
  * Cryptographically verifies a stream playback token using constant-time comparison or
  * asymmetric public key verification, and checks expiry against standard UNIX seconds.
+ * Validates camera scoping if requiredCameraId or expected event is specified.
  */
-export function verifyStreamToken(token: string, keyOrSecret: string): { valid: boolean; payload?: any; reason?: string } {
+export function verifyStreamToken(
+  token: string,
+  keyOrSecret: string,
+  requiredCameraId?: string
+): { valid: boolean; payload?: any; reason?: string } {
   try {
     if (!token || typeof token !== 'string') {
       return { valid: false, reason: 'Missing token' };
@@ -157,6 +167,11 @@ export function verifyStreamToken(token: string, keyOrSecret: string): { valid: 
 
     if (typeof payload.exp !== 'number' || nowSeconds > payload.exp) {
       return { valid: false, reason: 'Token has expired' };
+    }
+
+    // 3. Camera Scoping Verification
+    if (requiredCameraId && payload.c && payload.c !== requiredCameraId) {
+      return { valid: false, reason: `Token scoped to camera '${payload.c}', mismatched with requested '${requiredCameraId}'` };
     }
 
     return { valid: true, payload };

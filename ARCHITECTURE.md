@@ -53,6 +53,58 @@ To satisfy both public discovery and secure monetization, the platform operates 
    - **Delivery**: 2-second HLS chunks distributed via global CDN edge points.
    - **Verification Bed**: A dedicated rehearsal event (`evt_srs_rehearsal_04` / `srs-obs-rehearsal`) is configured to validate the end-to-end OBS/SRS/HLS pipeline independently of YouTube.
 
+## Multi-Camera Live Streaming Architecture
+
+The platform supports multi-camera stage coverage across two synchronized operating modes:
+
+```
+[ Stage Cameras & Master Soundboard ]
+  ├─ Audio Desk: Master Console (48kHz Stereo AAC) ──> Shared Master Audio Bus
+  ├─ Camera 1: Main Stage   (RTMP/SRT) ──┐
+  ├─ Camera 2: Front Close  (RTMP/SRT) ──┼──> [ SRS Media Origin :1935 / :10080 ]
+  ├─ Camera 3: Side Stage   (RTMP/SRT) ──┤         │
+  └─ Camera 4: Audience     (RTMP/SRT) ──┘         v
+                                        [ FFmpeg ABR Transcoder ]
+                                          - Strict 2.0s GOP Alignment (-g 60)
+                                          - Aligned HLS Chunks + #EXT-X-PROGRAM-DATE-TIME
+                                                   │
+                                                   v
+                          +-------------------------------------------------+
+                          |             Cloudflare Workers CDN              |
+                          |   - Asymmetric/HMAC Pre-Cache Auth Gate         |
+                          |   - Scoped Camera Validation (c: cameraId)      |
+                          +------------------------+------------------------+
+                                                   |
+                   +-------------------------------+-------------------------------+
+                   | (Mode A: Director Control)                    | (Mode B: Viewer Choice)
+                   v                                               v
+    [ Single Program Feed ]                           [ Angle Selector in Player ]
+    - OBS / Director Switcher                         - [Main] [Close] [Side] [Audience]
+    - Realtime Socket.IO Broadcast                    - Deliver ONLY Selected Feed
+    - All 50k Viewers Synchronized                    - Continuous Master Audio & Fallback
+```
+
+### 1. Ingestion & Credential Security
+- **Independent Ingest Points**: Each camera angle receives an independent, cryptographically random `streamKey`, dedicated `rtmpIngestUrl`, and optional low-latency `srtIngestUrl` (port 10080).
+- **Zero Exposure**: Publishing credentials and internal SRS ingest paths are retained strictly in the administrative plane and database; viewer-facing endpoints (`/api/v1/cameras`) strip all publishing keys.
+- **SRS Webhook Lifecycle**: SRS `on_publish` authenticates individual camera stream keys, transitioning camera status to `LIVE`. The `on_unpublish` webhook tracks disconnections, automatically triggering default camera fallback if an active camera goes offline.
+
+### 2. Operating Modes
+- **Mode A: Director-Controlled Mode**:
+  - Live cameras connect to the production switcher (e.g., OBS Studio).
+  - The director monitors multiview feeds and cuts between angles.
+  - Switches are broadcast in real-time across the Socket.IO cluster via the `camera_switched` event, instantaneously switching viewer playback without reloading the page.
+- **Mode B: Viewer-Selectable Camera Mode**:
+  - Each camera publishes an independent HLS variant tree.
+  - Viewers toggle between `[Main Stage]`, `[Front Close-up]`, `[Side Stage]`, and `[Audience]` directly inside the player.
+  - **Bandwidth Optimization**: Viewers download only the selected camera angle (1x bitrate), satisfying 50,000 concurrent viewer scalability without origin or egress overload.
+  - **Session Preservation**: Switching angles preserves the viewer's single active ticket session, updating the cryptographically scoped token (`c: cameraId`).
+  - **Resilient Fallback**: If an angle disconnects or returns 404, the player automatically falls back to Camera 1 (Default / Main Stage) with a non-intrusive alert.
+
+### 3. Audio & Synchronization Strategy
+- **Shared Master Audio**: All camera angles share the identical master audio mix from the front-of-house soundboard. When switching angles in the player, audio continuity is preserved without interruption or volume jumps.
+- **GOP & Timestamp Alignment**: FFmpeg scripts enforce strict 2.0-second GOP intervals (`-g 60 -keyint_min 60 -sc_threshold 0` at 30/60fps) with `#EXT-X-PROGRAM-DATE-TIME` tags. HLS segments align across all camera angles, keeping video and audio synchronized within the live sliding window.
+
 ## High-Concurrency Strategy (50,000 Concurrent Viewers)
 
 1. **Jittered Heartbeat Dispersion**:

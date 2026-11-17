@@ -3,6 +3,7 @@ import express from 'express';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { ChatService, GiftService, StreamService } from '@concert/business-logic';
+import { SystemRole } from '@concert/types';
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,29 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
+// Authorized roles for director and administrative switching controls
+const PRODUCTION_OPERATOR_ROLES: SystemRole[] = [
+  'SUPER_ADMIN',
+  'EVENT_ADMIN',
+  'EVENT_MANAGER'
+];
+
+function isProductionOperator(role?: SystemRole): boolean {
+  if (!role) return false;
+  return PRODUCTION_OPERATOR_ROLES.includes(role);
+}
+
+// ----------------------------------------------------------------------------
+// Wire StreamService Realtime Event Bus -> Socket.IO Room Broadcasts
+// ----------------------------------------------------------------------------
+StreamService.onCameraEvent((event, data) => {
+  if (data?.eventId) {
+    io.to(`event:${data.eventId}`).emit(event, data);
+  } else {
+    io.emit(event, data);
+  }
+});
+
 // Health endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', uptime: process.uptime(), connections: io.engine.clientsCount });
@@ -31,9 +55,21 @@ io.on('connection', (socket) => {
     socket.join(`event:${eventId}`);
     console.log(`User ${user?.name || 'Anonymous'} joined room: event:${eventId}`);
 
-    // Send back initial state
+    // Send back initial chat history
     const history = ChatService.getMessages(eventId);
     socket.emit('chat_history', history);
+
+    // Send back initial multi-camera status
+    const channel = StreamService.getChannelByEventId(eventId);
+    const cameras = StreamService.getPublicCamerasByEventId(eventId);
+    const activeCamera = StreamService.getActiveLiveCamera(eventId);
+
+    socket.emit('camera_state_init', {
+      eventId,
+      cameraMode: channel?.cameraMode || 'DIRECTOR_CONTROLLED',
+      activeCameraId: channel?.activeCameraId || activeCamera?.id,
+      cameras
+    });
 
     const viewerCount = StreamService.getActiveViewersCount(eventId);
     io.to(`event:${eventId}`).emit('viewers_updated', { count: viewerCount });
@@ -42,6 +78,78 @@ io.on('connection', (socket) => {
   // Client leaves room
   socket.on('leave_event', ({ eventId }) => {
     socket.leave(`event:${eventId}`);
+  });
+
+  // --------------------------------------------------------------------------
+  // Multi-Camera Director Controls (Mode A)
+  // --------------------------------------------------------------------------
+  socket.on('director_switch_camera', (payload, callback) => {
+    try {
+      const { eventId, cameraId, user } = payload;
+
+      // Security check: restrict director switching to authorized production staff
+      if (user?.role && !isProductionOperator(user.role)) {
+        throw new Error('Forbidden: Only authorized directors and administrators can switch live camera feeds.');
+      }
+
+      const activeCamera = StreamService.switchDirectorCamera(eventId, cameraId, user?.id || 'director');
+
+      // Immediate real-time broadcast to all viewers in this event room
+      io.to(`event:${eventId}`).emit('camera_switched', {
+        eventId,
+        activeCameraId: activeCamera.id,
+        activeCameraName: activeCamera.name,
+        cameraIndex: activeCamera.cameraIndex,
+        hlsMasterUrl: activeCamera.hlsMasterUrl,
+        operatorUserId: user?.id || 'director',
+        timestamp: new Date().toISOString()
+      });
+
+      if (callback) callback({ success: true, activeCamera });
+    } catch (err: any) {
+      if (callback) callback({ success: false, error: err.message });
+      socket.emit('error_notification', { message: err.message });
+    }
+  });
+
+  // Toggle Operating Mode: Director-Controlled vs Viewer-Selectable
+  socket.on('update_camera_mode', (payload, callback) => {
+    try {
+      const { eventId, cameraMode, user } = payload;
+
+      if (user?.role && !isProductionOperator(user.role)) {
+        throw new Error('Forbidden: Only administrators can update stream operating mode.');
+      }
+
+      const updatedMode = StreamService.setCameraMode(eventId, cameraMode);
+
+      io.to(`event:${eventId}`).emit('camera_mode_changed', {
+        eventId,
+        cameraMode: updatedMode
+      });
+
+      if (callback) callback({ success: true, cameraMode: updatedMode });
+    } catch (err: any) {
+      if (callback) callback({ success: false, error: err.message });
+      socket.emit('error_notification', { message: err.message });
+    }
+  });
+
+  // Request latest camera state
+  socket.on('get_camera_state', ({ eventId }, callback) => {
+    const channel = StreamService.getChannelByEventId(eventId);
+    const cameras = StreamService.getPublicCamerasByEventId(eventId);
+    const activeCamera = StreamService.getActiveLiveCamera(eventId);
+
+    const state = {
+      eventId,
+      cameraMode: channel?.cameraMode || 'DIRECTOR_CONTROLLED',
+      activeCameraId: channel?.activeCameraId || activeCamera?.id,
+      cameras
+    };
+
+    if (callback) callback(state);
+    socket.emit('camera_state_update', state);
   });
 
   // Incoming chat message
@@ -106,5 +214,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Realtime Service] Persistent Socket.IO live server listening on port ${PORT}`);
+  console.log(`[Realtime Service] Multi-Camera Socket.IO live server listening on port ${PORT}`);
 });

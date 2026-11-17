@@ -146,6 +146,15 @@ export default function AdminEventsPage() {
               </select>
 
               <a
+                href="/admin/streaming"
+                className="px-3 py-2 rounded-xl border border-line bg-surface-raised text-xs font-bold text-neutral-200 hover:text-white hover:border-polo-red transition-all flex items-center gap-1.5"
+                title="Manage Multi-Camera Studio"
+              >
+                <Radio className="size-3.5 text-polo-red" />
+                <span>Cameras</span>
+              </a>
+
+              <a
                 href={`/events/${event.slug}`}
                 target="_blank"
                 className="p-2 rounded-xl border border-line bg-surface-raised text-muted hover:text-white transition-colors"

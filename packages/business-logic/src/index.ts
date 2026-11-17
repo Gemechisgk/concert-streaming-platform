@@ -6,3 +6,4 @@ export * from './stream.service';
 export * from './chat.service';
 export * from './gift.service';
 export * from './analytics.service';
+export * from './obs-switcher.service';

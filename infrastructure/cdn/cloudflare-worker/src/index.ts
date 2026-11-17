@@ -192,6 +192,26 @@ export default {
       );
     }
 
+    // Scoped camera authorization validation
+    const requestedCamera = url.searchParams.get('camera');
+    if (requestedCamera && authCheck.payload?.c && authCheck.payload.c !== requestedCamera) {
+      return new Response(
+        JSON.stringify({
+          error: `Unauthorized: Token scoped to camera '${authCheck.payload.c}', mismatched with requested '${requestedCamera}'`,
+          code: 'TOKEN_CAMERA_MISMATCH'
+        }),
+        {
+          status: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+            'Vary': 'Authorization, x-playback-token',
+            'X-Edge-Gate': 'DENIED_CAMERA_MISMATCH'
+          }
+        }
+      );
+    }
+
     // =======================================================================
     // STEP 2: NORMALIZED CACHE-KEY GENERATION (FOR .TS SEGMENTS)
     // =======================================================================
