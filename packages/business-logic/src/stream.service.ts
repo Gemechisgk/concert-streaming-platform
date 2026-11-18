@@ -843,19 +843,22 @@ export class StreamService {
   }
 
   static recordHeartbeat(streamToken: string, cameraId?: string): boolean {
-    const session = activeSessions.get(streamToken);
-    if (!session) {
-      return false;
-    }
-
+    // Validate the signed token itself — in serverless deployments (Vercel) the
+    // in-memory session may live on a different instance than the heartbeat request.
     const tokenCheck = verifyStreamToken(streamToken, STREAM_VERIFICATION_KEY, cameraId);
+    const session = activeSessions.get(streamToken);
+
     if (!tokenCheck.valid) {
-      activeSessions.delete(streamToken);
-      ticketToSessionToken.delete(session.ticketId);
+      if (session) {
+        activeSessions.delete(streamToken);
+        ticketToSessionToken.delete(session.ticketId);
+      }
       return false;
     }
 
-    session.lastHeartbeat = new Date().toISOString();
+    if (session) {
+      session.lastHeartbeat = new Date().toISOString();
+    }
     return true;
   }
 

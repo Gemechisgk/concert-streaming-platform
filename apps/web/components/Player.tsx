@@ -226,7 +226,7 @@ export default function Player({
   // Core HLS Stream Loader with Timestamp & Audio Continuity
   // --------------------------------------------------------------------------
   const loadStreamSource = useCallback(
-    (targetUrl: string, token?: string, cameraId?: string) => {
+    (targetUrl: string, token?: string, cameraId?: string, forcePlay: boolean = false) => {
       const video = videoRef.current;
       if (!video) return;
 
@@ -289,8 +289,17 @@ export default function Player({
             video.currentTime = targetTime;
           }
 
-          if (wasPlaying) {
-            video.play().catch(() => {});
+          if (wasPlaying || forcePlay || !hasStartedPlaybackRef.current) {
+            hasStartedPlaybackRef.current = true;
+            const playPromise = video.play();
+            if (playPromise) {
+              playPromise.catch(() => {
+                // Browsers block unmuted autoplay without a user gesture: start muted
+                video.muted = true;
+                setIsMuted(true);
+                video.play().catch(() => {});
+              });
+            }
           }
 
           const levelNames = data.levels.map(l => `${l.height}p`);
@@ -307,7 +316,8 @@ export default function Player({
                   manifestRetryCountRef.current += 1;
                   if (manifestRetryCountRef.current <= 2) {
                     console.warn(`[Player] Retrying manifest load (${manifestRetryCountRef.current}/2)...`);
-                    setTimeout(() => hls.startLoad(), 800);
+                    // startLoad() only resumes fragment loading; re-request the playlist itself
+                    setTimeout(() => hls.loadSource(effectiveUrl), 800);
                   } else {
                     console.warn('[Player] Manifest load failed after retries, falling back to verified online camera.');
                     manifestRetryCountRef.current = 0;
@@ -326,6 +336,7 @@ export default function Player({
               default:
                 setHasError(true);
                 setErrorMessage('Camera stream connection interrupted.');
+                setIsLoading(false);
                 setIsSwitchingCamera(false);
                 hls.destroy();
                 break;
@@ -339,7 +350,17 @@ export default function Player({
           setIsSwitchingCamera(false);
           video.volume = currentVol;
           video.muted = currentMuted;
-          if (wasPlaying) video.play().catch(() => {});
+          if (wasPlaying || forcePlay || !hasStartedPlaybackRef.current) {
+            hasStartedPlaybackRef.current = true;
+            const playPromise = video.play();
+            if (playPromise) {
+              playPromise.catch(() => {
+                video.muted = true;
+                setIsMuted(true);
+                video.play().catch(() => {});
+              });
+            }
+          }
         });
       }
     },
@@ -431,6 +452,7 @@ export default function Player({
   const fallbackAttemptsRef = useRef<number>(0);
   const lastFallbackTimeRef = useRef<number>(0);
   const manifestRetryCountRef = useRef<number>(0);
+  const hasStartedPlaybackRef = useRef<boolean>(false);
 
   // Fallback to verified online camera (Camera 1 / Main Stage)
   const handleOfflineFallback = useCallback(() => {
@@ -558,7 +580,7 @@ export default function Player({
   const retryPlayback = () => {
     setHasError(false);
     setIsLoading(true);
-    loadStreamSource(currentStreamUrl, activeStreamToken, selectedCameraId);
+    loadStreamSource(currentStreamUrl, activeStreamToken, selectedCameraId, true);
   };
 
   const activeCameraObj = cameras.find(c => c.id === selectedCameraId) || cameras[0];
