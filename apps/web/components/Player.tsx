@@ -82,6 +82,10 @@ export default function Player({
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Live DVR seek state (bounded by the stream's seekable window / back buffer)
+  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [seekableRange, setSeekableRange] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [isBehindLive, setIsBehindLive] = useState(false);
   const [qualities, setQualities] = useState<string[]>(['1080p', '720p', '480p']);
   const [currentQualityIndex, setCurrentQualityIndex] = useState<number>(-1); // -1 = Auto
   const [showSettings, setShowSettings] = useState(false);
@@ -522,6 +526,37 @@ export default function Player({
     return () => clearTimeout(timer);
   }, [activeStreamToken, selectedCameraId, onHeartbeat]);
 
+  // Track the live seekable window and playback position for the DVR scrubber
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const syncPosition = () => {
+      if (!video.seekable.length) return;
+      const start = video.seekable.start(0);
+      const end = video.seekable.end(video.seekable.length - 1);
+      setSeekableRange({ start, end });
+      setPlaybackPosition(video.currentTime);
+      setIsBehindLive(end - video.currentTime > 3);
+    };
+
+    video.addEventListener('timeupdate', syncPosition);
+    video.addEventListener('durationchange', syncPosition);
+    video.addEventListener('loadedmetadata', syncPosition);
+    return () => {
+      video.removeEventListener('timeupdate', syncPosition);
+      video.removeEventListener('durationchange', syncPosition);
+      video.removeEventListener('loadedmetadata', syncPosition);
+    };
+  }, [sourceMode]);
+
+  // Keep fullscreen button state in sync when the user exits via Esc / browser UI
+  useEffect(() => {
+    const sync = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
   // Video Controls
   const togglePlay = () => {
     const video = videoRef.current;
@@ -553,12 +588,44 @@ export default function Player({
   };
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(console.error);
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(console.error);
+    const container = containerRef.current;
+    if (!container) return;
+    const requestFs =
+      container.requestFullscreen ||
+      (container as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen;
+    const exitFs =
+      (document as Document & { webkitExitFullscreen?: () => Promise<void> }).exitFullscreen ||
+      (document as Document & { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen;
+
+    if (!document.fullscreenElement && !(document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
+      if (requestFs) {
+        requestFs.call(container).then(() => setIsFullscreen(true)).catch(console.error);
+      } else if ((videoRef.current as HTMLVideoElement & { webkitEnterFullscreen?: () => void })?.webkitEnterFullscreen) {
+        // iOS Safari: only the video element itself can go fullscreen
+        (videoRef.current as HTMLVideoElement & { webkitEnterFullscreen: () => void }).webkitEnterFullscreen();
+        setIsFullscreen(true);
+      }
+    } else if (exitFs) {
+      exitFs.call(document).then(() => setIsFullscreen(false)).catch(console.error);
     }
+  };
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const target = parseFloat(e.target.value);
+    video.currentTime = target;
+    setPlaybackPosition(target);
+  };
+
+  const jumpToLive = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
+    video.currentTime = end;
+    setPlaybackPosition(end);
+    setIsBehindLive(false);
+    video.play().catch(() => {});
   };
 
   const selectQuality = (index: number) => {
@@ -684,6 +751,7 @@ export default function Player({
               poster={posterUrl}
               playsInline
               onClick={togglePlay}
+              onDoubleClick={toggleFullscreen}
               className="size-full object-contain cursor-pointer"
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
@@ -744,10 +812,39 @@ export default function Player({
 
             {/* Bottom Controls Bar */}
             <div
-              className={`absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/50 to-transparent transition-opacity duration-300 z-10 flex items-center justify-between ${
+              className={`absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/95 via-black/50 to-transparent transition-opacity duration-300 z-10 ${
                 controlsVisible || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
               }`}
             >
+              {/* Live DVR Scrubber: seek back within the buffered window */}
+              {seekableRange.end - seekableRange.start > 4 && (
+                <div className="flex items-center gap-2 pb-2">
+                  <input
+                    type="range"
+                    min={seekableRange.start}
+                    max={seekableRange.end}
+                    step="0.1"
+                    value={Math.min(Math.max(playbackPosition, seekableRange.start), seekableRange.end)}
+                    onChange={handleSeekChange}
+                    className="flex-1 accent-polo-red h-1 bg-white/30 rounded-lg cursor-pointer"
+                    aria-label="Seek within live buffer"
+                  />
+                  <button
+                    onClick={jumpToLive}
+                    className={`shrink-0 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition-all ${
+                      isBehindLive
+                        ? 'bg-polo-red text-white shadow-md shadow-polo-red/30 hover:bg-polo-red-dark'
+                        : 'bg-white/10 text-white/70'
+                    }`}
+                    title={isBehindLive ? 'Jump back to the live edge' : 'You are watching live'}
+                  >
+                    <span className={`size-1.5 rounded-full ${isBehindLive ? 'bg-white animate-ping' : 'bg-polo-red animate-pulse'}`} />
+                    {isBehindLive ? 'Go Live' : 'Live'}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   onClick={togglePlay}
@@ -829,6 +926,7 @@ export default function Player({
                 >
                   {isFullscreen ? <Minimize className="size-4 sm:size-5" /> : <Maximize className="size-4 sm:size-5" />}
                 </button>
+              </div>
               </div>
             </div>
           </div>
